@@ -318,9 +318,6 @@ L["Timewalking setting changed to Default."] = true
 L[
         "This macro uses features that are not available in this version. You need to update GSE to %s in order to use this macro."
     ] = true
-L["Export Macro Read Only"] = true
-L["This sequence is Read Only and unable to be edited."] = true
-L["Disable Editor"] = true
 
 -- GSE 2.4.06
 L["Your ClassID is "] = true
@@ -478,8 +475,6 @@ L["Add Pause"] = true
 L["Add a Pause Block."] = true
 L["Pause for the GCD."] = true
 L["Error processing Custom Pause Value.  You will need to recheck your macros."] = true
-L["Restricted"] = true
-L["RESTRICTED: Macro specifics disabled by author."] = true
 L["Invalid value entered into pause block. Needs to be 'GCD' or a Number."] = true
 L["Support GSE"] = true
 
@@ -780,3 +775,9 @@ L["Processing Collection of %s Elements."] = true
 L["Already Known"] = true
 L["This version of GSE is incompatabile with this version of the game."] = true
 L[" was imported."] = true
+
+-- #1617
+L["Actionbar Overrides"] = true
+L["Actionbar Buttons"] = true
+L["New KeyBind"] = true
+L["New Actionbar Override"] = true

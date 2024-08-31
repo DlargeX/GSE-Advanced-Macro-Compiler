@@ -64,7 +64,7 @@ function GSE:ZONE_CHANGED_NEW_AREA()
     else
         GSE.inArena = false
     end
-    if type == "scenario" or difficulty == 167 or difficulty == 152 then
+    if type == "scenario" or difficulty == 167 or difficulty == 152 or difficulty == 208 then
         GSE.inScenario = true
     else
         GSE.inScenario = false
@@ -99,7 +99,84 @@ function GSE:ZONE_CHANGED_NEW_AREA()
     GSE.UnsavedOptions.ReloadQueued = nil
     GSE.ReloadSequences()
 end
+local SHBT = CreateFrame("Frame", nil, nil, "SecureHandlerBaseTemplate,SecureFrameTemplate")
 
+local function overrideActionButton(Button, Sequence, force)
+    if GSE.isEmpty(GSE.ButtonOverrides) then
+        GSE.ButtonOverrides = {}
+    end
+
+    if not InCombatLockdown() and (not GSE.ButtonOverrides[Button] or force) then
+        SHBT:WrapScript(
+            _G[Button],
+            "OnClick",
+            [[
+    local parent, slot = self and self:GetParent():GetParent(), self and self:GetID()
+    local page = parent and parent:GetAttribute("actionpage")
+    local action = page and slot and slot > 0 and (slot + page*12 - 12)
+    if action then
+        local at, id = GetActionInfo(action)
+        if at and id then
+            self:SetAttribute("type", "action")
+            self:SetAttribute('action', action)
+        else
+            self:SetAttribute("type", "click")
+        end
+    end
+]]
+        )
+        _G[Button]:SetAttribute("type", "click")
+
+        GSE.ButtonOverrides[Button] = Sequence
+
+    --if number and GetBindingByKey(number) and string.upper(GetBindingByKey(number)) == string.upper(Button) then
+    --SetBindingClick(number, Button, _G[Button])
+    --end
+    end
+    if not InCombatLockdown() then
+        _G[Button]:SetAttribute("clickbutton", _G[Sequence])
+    end
+end
+local function LoadOverrides(force)
+    if GSE.isEmpty(GSE_C["ActionBarBinds"]) then
+        GSE_C["ActionBarBinds"] = {}
+    end
+    if GSE.isEmpty(GSE_C["ActionBarBinds"]["Specialisations"]) then
+        GSE_C["ActionBarBinds"]["Specialisations"] = {}
+    end
+    if GSE.isEmpty(GSE_C["ActionBarBinds"]["Specialisations"][tostring(GetSpecialization())]) then
+        GSE_C["ActionBarBinds"]["Specialisations"][tostring(GetSpecialization())] = {}
+    end
+    if GSE.isEmpty(GSE_C["ActionBarBinds"]["Loadouts"]) then
+        GSE_C["ActionBarBinds"]["Loadouts"] = {}
+    end
+    if GSE.isEmpty(GSE_C["ActionBarBinds"]["Loadouts"][tostring(GetSpecialization())]) then
+        GSE_C["ActionBarBinds"]["Loadouts"][tostring(GetSpecialization())] = {}
+    end
+    for k, v in pairs(GSE_C["ActionBarBinds"]["Specialisations"][tostring(GetSpecialization())]) do
+        overrideActionButton(k, v, force)
+    end
+
+    if not InCombatLockdown() then
+        local selected =
+            PlayerUtil.GetCurrentSpecID() and
+            tostring(C_ClassTalents.GetLastSelectedSavedConfigID(PlayerUtil.GetCurrentSpecID()))
+
+        if
+            selected and GSE_C["ActionBarBinds"]["Loadouts"][tostring(GetSpecialization())] and
+                GSE_C["ActionBarBinds"]["Loadouts"][tostring(GetSpecialization())][selected]
+         then
+            GSE.PrintDebugMessage("changing from ", tostring(GSE.GetSelectedLoadoutConfigID()), "EVENTS")
+            for k, v in pairs(GSE_C["ActionBarBinds"]["Loadouts"][tostring(GetSpecialization())][selected]) do
+                if GSE.isEmpty(GSE.ButtonOverrides) then
+                    GSE.ButtonOverrides = {}
+                end
+                overrideActionButton(k, v, force)
+                GSE.ButtonOverrides[v] = k
+            end
+        end
+    end
+end
 local function LoadKeyBindings(payload)
     if GSE.isEmpty(GSE_C) then
         GSE_C = {}
@@ -110,6 +187,7 @@ local function LoadKeyBindings(payload)
     if GSE.isEmpty(GSE_C["KeyBindings"][tostring(GetSpecialization())]) then
         GSE_C["KeyBindings"][tostring(GetSpecialization())] = {}
     end
+
     for k, v in pairs(GSE_C["KeyBindings"][tostring(GetSpecialization())]) do
         if k ~= "LoadOuts" and not InCombatLockdown() then
             SetBindingClick(k, v, _G[v])
@@ -120,7 +198,6 @@ local function LoadKeyBindings(payload)
         local selected =
             PlayerUtil.GetCurrentSpecID() and
             tostring(C_ClassTalents.GetLastSelectedSavedConfigID(PlayerUtil.GetCurrentSpecID()))
-
         if
             selected and GSE_C["KeyBindings"][tostring(GetSpecialization())]["LoadOuts"] and
                 GSE_C["KeyBindings"][tostring(GetSpecialization())]["LoadOuts"][selected]
@@ -133,6 +210,9 @@ local function LoadKeyBindings(payload)
         end
     end
 end
+function GSE.ReloadOverrides(force)
+    LoadOverrides(force)
+end
 
 function GSE.ReloadKeyBindings()
     LoadKeyBindings(true)
@@ -144,6 +224,7 @@ function GSE:PLAYER_ENTERING_WORLD()
     GSE.PlayerEntered = true
     LoadKeyBindings(GSE.PlayerEntered)
     GSE:ZONE_CHANGED_NEW_AREA()
+    C_Timer.After(10, LoadOverrides)
 end
 
 function GSE:ADDON_LOADED(event, addon)
@@ -330,6 +411,7 @@ function GSE:PLAYER_SPECIALIZATION_CHANGED()
     end
     if not InCombatLockdown() then
         LoadKeyBindings(GSE.PlayerEntered)
+        LoadOverrides()
         GSE.ReloadSequences()
     end
 end
@@ -348,20 +430,24 @@ end
 
 function GSE:ACTIVE_TALENT_GROUP_CHANGED()
     LoadKeyBindings(GSE.PlayerEntered)
+    LoadOverrides()
     GSE.ReloadSequences()
 end
 
 function GSE:PLAYER_PVP_TALENT_UPDATE()
     LoadKeyBindings(GSE.PlayerEntered)
+    LoadOverrides()
     GSE.ReloadSequences()
 end
 
 function GSE:SPEC_INVOLUNTARILY_CHANGED()
     GSE.ReloadSequences(GSE.PlayerEntered)
+    LoadOverrides()
 end
 
 function GSE:TRAIT_NODE_CHANGED()
     LoadKeyBindings(GSE.PlayerEntered)
+    LoadOverrides()
     GSE.ReloadSequences()
 end
 
@@ -376,16 +462,19 @@ end
 function GSE:TRAIT_CONFIG_UPDATED(_, payload)
     GSE:UnregisterEvent("TRAIT_CONFIG_UPDATED")
     LoadKeyBindings(GSE.PlayerEntered)
+    LoadOverrides()
     GSE.ReloadSequences()
     GSE:RegisterEvent("TRAIT_CONFIG_UPDATED")
 end
 function GSE:ACTIVE_COMBAT_CONFIG_CHANGED()
     LoadKeyBindings(GSE.PlayerEntered)
+    LoadOverrides()
     GSE.ReloadSequences()
 end
 
 function GSE:PLAYER_TALENT_UPDATE()
     LoadKeyBindings(GSE.PlayerEntered)
+    LoadOverrides()
     GSE.ReloadSequences()
     GSE.ReloadSequences(GSE.PlayerEntered)
 end
