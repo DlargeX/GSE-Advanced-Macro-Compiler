@@ -147,27 +147,27 @@ local function LoadOverrides(force)
     if GSE.isEmpty(GSE_C["ActionBarBinds"]["Specialisations"][tostring(GetSpecialization())]) then
         GSE_C["ActionBarBinds"]["Specialisations"][tostring(GetSpecialization())] = {}
     end
-    if GSE.isEmpty(GSE_C["ActionBarBinds"]["Loadouts"]) then
-        GSE_C["ActionBarBinds"]["Loadouts"] = {}
+    if GSE.isEmpty(GSE_C["ActionBarBinds"]["LoadOuts"]) then
+        GSE_C["ActionBarBinds"]["LoadOuts"] = {}
     end
-    if GSE.isEmpty(GSE_C["ActionBarBinds"]["Loadouts"][tostring(GetSpecialization())]) then
-        GSE_C["ActionBarBinds"]["Loadouts"][tostring(GetSpecialization())] = {}
+    if GSE.isEmpty(GSE_C["ActionBarBinds"]["LoadOuts"][tostring(GetSpecialization())]) then
+        GSE_C["ActionBarBinds"]["LoadOuts"][tostring(GetSpecialization())] = {}
     end
-    for k, v in pairs(GSE_C["ActionBarBinds"]["Specialisations"][tostring(GetSpecialization())]) do
-        overrideActionButton(k, v, force)
-    end
-
     if not InCombatLockdown() then
+        for k, v in pairs(GSE_C["ActionBarBinds"]["Specialisations"][tostring(GetSpecialization())]) do
+            overrideActionButton(k, v, force)
+        end
+
         local selected =
             PlayerUtil.GetCurrentSpecID() and
             tostring(C_ClassTalents.GetLastSelectedSavedConfigID(PlayerUtil.GetCurrentSpecID()))
 
         if
-            selected and GSE_C["ActionBarBinds"]["Loadouts"][tostring(GetSpecialization())] and
-                GSE_C["ActionBarBinds"]["Loadouts"][tostring(GetSpecialization())][selected]
+            selected and GSE_C["ActionBarBinds"]["LoadOuts"][tostring(GetSpecialization())] and
+                GSE_C["ActionBarBinds"]["LoadOuts"][tostring(GetSpecialization())][selected]
          then
             GSE.PrintDebugMessage("changing from ", tostring(GSE.GetSelectedLoadoutConfigID()), "EVENTS")
-            for k, v in pairs(GSE_C["ActionBarBinds"]["Loadouts"][tostring(GetSpecialization())][selected]) do
+            for k, v in pairs(GSE_C["ActionBarBinds"]["LoadOuts"][tostring(GetSpecialization())][selected]) do
                 if GSE.isEmpty(GSE.ButtonOverrides) then
                     GSE.ButtonOverrides = {}
                 end
@@ -475,7 +475,6 @@ end
 function GSE:PLAYER_TALENT_UPDATE()
     LoadKeyBindings(GSE.PlayerEntered)
     LoadOverrides()
-    GSE.ReloadSequences()
     GSE.ReloadSequences(GSE.PlayerEntered)
 end
 
@@ -502,7 +501,11 @@ function GSE:GROUP_ROSTER_UPDATE(...)
         GSE.SendSpellCache(channel)
     end
     -- Group Team stuff
-    GSE:ZONE_CHANGED_NEW_AREA()
+    local _, _, difficulty, _, _, _, _, _, _ = GetInstanceInfo()
+    -- dont trigger the normal things if in a delve
+    if difficulty ~= 208 then
+        GSE:ZONE_CHANGED_NEW_AREA()
+    end
 end
 
 function GSE:GUILD_ROSTER_UPDATE(...)

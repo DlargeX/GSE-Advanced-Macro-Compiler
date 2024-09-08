@@ -11,7 +11,7 @@ function GSE.DeleteSequence(classid, sequenceName)
     GSESequences[tonumber(classid)][sequenceName] = nil
 end
 
-function GSE.CloneSequence(orig, keepcomments)
+function GSE.CloneSequence(orig)
     local orig_type = type(orig)
     local copy
     if orig_type == "table" then
@@ -23,11 +23,7 @@ function GSE.CloneSequence(orig, keepcomments)
     else -- number, string, boolean, etc
         copy = orig
     end
-    -- if not GSE.isEmpty(keepcomments) then
-    --     for k,v in ipairs(copy.Macros) do
-    --         -- TODO Strip COmments
-    --     end
-    -- end
+
     return copy
 end
 
@@ -191,19 +187,14 @@ function GSE.PerformReloadSequences()
     GSE.PrintDebugMessage("Reloading Sequences", Statics.DebugModules["Storage"])
 
     for name, sequence in pairs(GSE.Library[GSE.GetCurrentClassID()]) do
-        -- check that the macro exists.  This will cause an issue if people are calling macros that are in GSE but there is no macro stub made.
-
         if not sequence.MetaData.Disabled then
             GSE.UpdateSequence(name, sequence.Macros[GSE.GetActiveSequenceVersion(name)])
         end
     end
-    if GSEOptions.CreateGlobalButtons then
-        if not GSE.isEmpty(GSE.Library[0]) then
-            for name, sequence in pairs(GSE.Library[0]) do
-                -- check that the macro exists.  This will cause an issue if people are calling macros that are in GSE but there is no macro stub made.
-                if GSE.isEmpty(sequence.MetaData.Disabled) then
-                    GSE.UpdateSequence(name, sequence.Macros[GSE.GetActiveSequenceVersion(name)])
-                end
+    if not GSE.isEmpty(GSE.Library[0]) then
+        for name, sequence in pairs(GSE.Library[0]) do
+            if GSE.isEmpty(sequence.MetaData.Disabled) then
+                GSE.UpdateSequence(name, sequence.Macros[GSE.GetActiveSequenceVersion(name)])
             end
         end
     end
@@ -533,17 +524,23 @@ function GSE.UpdateIcon(self, reset)
         if WeakAuras then
             WeakAuras.ScanEvents("GSE_SEQUENCE_ICON_UPDATE", gsebutton, spellinfo)
         end
-        if GSE.ButtonOverrides and GSE.ButtonOverrides[gsebutton] then
-            local parent, slot =
-                _G[GSE.ButtonOverrides[gsebutton]] and _G[GSE.ButtonOverrides[gsebutton]]:GetParent():GetParent(),
-                _G[GSE.ButtonOverrides[gsebutton]] and _G[GSE.ButtonOverrides[gsebutton]]:GetID()
-            local page = parent and parent:GetAttribute("actionpage")
-            local action = page and slot and slot > 0 and (slot + page * 12 - 12)
-            if action then
-                local at = GetActionInfo(action)
-                if GSE.isEmpty(at) then
-                    _G[GSE.ButtonOverrides[gsebutton]].icon:SetTexture(spellinfo.iconID)
-                    _G[GSE.ButtonOverrides[gsebutton]].icon:Show()
+
+        if GSE.ButtonOverrides then
+            for k, v in pairs(GSE.ButtonOverrides) do
+                if v == gsebutton and _G[k] then
+                    local parent, slot = _G[k] and _G[k]:GetParent():GetParent(), _G[k] and _G[k]:GetID()
+                    local page = parent and parent:GetAttribute("actionpage")
+                    local action = page and slot and slot > 0 and (slot + page * 12 - 12)
+                    if action then
+                        local at = GetActionInfo(action)
+                        if GSE.isEmpty(at) then
+                            _G[k].icon:SetTexture(spellinfo.iconID)
+                            _G[k].icon:Show()
+                            _G[k].TextOverlayContainer.Count:SetText(gsebutton)
+                            _G[k].TextOverlayContainer.Count:SetTextScale(0.6)
+                        end
+                    end
+                    break
                 end
             end
         end

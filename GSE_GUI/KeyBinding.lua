@@ -128,7 +128,7 @@ local function showKeybind(bind, button, specialization, loadout, type)
         if not GSE.isEmpty(bind) then
             keybind:SetKey(bind)
         end
-
+        keybind:SetWidth(400)
         keybind:SetCallback(
             "OnKeyChanged",
             function(self, _, key)
@@ -139,7 +139,7 @@ local function showKeybind(bind, button, specialization, loadout, type)
         keybind:SetLabel(L["Set Key to Bind"])
         local SequenceListbox = AceGUI:Create("Dropdown")
 
-        SequenceListbox:SetWidth(200)
+        SequenceListbox:SetWidth(400)
         SequenceListbox:SetLabel(L["Sequence"])
         local names = {}
 
@@ -161,7 +161,7 @@ local function showKeybind(bind, button, specialization, loadout, type)
 
         local TalentLoadOutList = AceGUI:Create("Dropdown")
 
-        TalentLoadOutList:SetWidth(200)
+        TalentLoadOutList:SetWidth(400)
         TalentLoadOutList:SetLabel(L["Talent Loadout"])
         local loadouts = {
             ["All"] = L["All Talent Loadouts"]
@@ -294,7 +294,7 @@ local function showKeybind(bind, button, specialization, loadout, type)
 
         local ActionButtonList = AceGUI:Create("Dropdown")
 
-        ActionButtonList:SetWidth(200)
+        ActionButtonList:SetWidth(400)
         ActionButtonList:SetLabel(L["Actionbar Buttons"])
         local buttonnames = {
             "ActionButton",
@@ -306,6 +306,12 @@ local function showKeybind(bind, button, specialization, loadout, type)
             "MultiBarLeftButton",
             "MultiBarRightButton"
         }
+        -- if ElvUI then
+        --     buttonnames = {}
+        --     for i = 1, 15 do
+        --         table.insert(buttonnames, "ElvUI_Bar" .. i .. "Button")
+        --     end
+        -- end
         local buttonlist = {}
         for _, v in ipairs(buttonnames) do
             for i = 1, 12 do
@@ -326,7 +332,7 @@ local function showKeybind(bind, button, specialization, loadout, type)
 
         local SequenceListbox = AceGUI:Create("Dropdown")
 
-        SequenceListbox:SetWidth(200)
+        SequenceListbox:SetWidth(400)
         SequenceListbox:SetLabel(L["Sequence"])
         local names = {}
 
@@ -348,7 +354,7 @@ local function showKeybind(bind, button, specialization, loadout, type)
 
         local TalentLoadOutList = AceGUI:Create("Dropdown")
 
-        TalentLoadOutList:SetWidth(200)
+        TalentLoadOutList:SetWidth(400)
         TalentLoadOutList:SetLabel(L["Talent Loadout"])
         local loadouts = {
             ["All"] = L["All Talent Loadouts"]
@@ -389,7 +395,7 @@ local function showKeybind(bind, button, specialization, loadout, type)
                     local destination = GSE_C["ActionBarBinds"]["Specialisations"][tostring(specialization)]
                     if loadout ~= "ALL" and loadout then
                         if GSE.isEmpty(GSE_C["ActionBarBinds"]["LoadOuts"][tostring(specialization)]) then
-                            GSE_C["ActionBarBinds"]["Loadouts"][tostring(specialization)] = {}
+                            GSE_C["ActionBarBinds"]["LoadOuts"][tostring(specialization)] = {}
                         end
                         if GSE.isEmpty(GSE_C["ActionBarBinds"]["LoadOuts"][tostring(specialization)][loadout]) then
                             GSE_C["ActionBarBinds"]["LoadOuts"][tostring(specialization)][loadout] = {}
@@ -543,16 +549,16 @@ local function buildKeybindHeader(specialization, bind, button, loadout, type)
                                         GSE_C["ActionBarBinds"]["Specialisations"][tostring(specialization)]
                                     if loadout ~= "ALL" and loadout then
                                         destination =
-                                            GSE_C["ActionBarBinds"]["Loadouts"][tostring(specialization)][loadout]
+                                            GSE_C["ActionBarBinds"]["LoadOuts"][tostring(specialization)][loadout]
                                         destination[bind] = nil
                                         local empty = true
                                         for _, _ in pairs(
-                                            GSE_C["ActionBarBinds"]["Loadouts"][tostring(specialization)][loadout]
+                                            GSE_C["ActionBarBinds"]["LoadOuts"][tostring(specialization)][loadout]
                                         ) do
                                             empty = false
                                         end
                                         if empty then
-                                            GSE_C["ActionBarBinds"]["Loadouts"][tostring(specialization)][loadout] = nil
+                                            GSE_C["ActionBarBinds"]["LoadOuts"][tostring(specialization)][loadout] = nil
                                         end
                                     else
                                         destination[bind] = nil
@@ -694,7 +700,7 @@ local function buildKeybindMenu()
             buildKeybindHeader(k, i, j, nil, "AO")
         end
 
-        for i, j in pairs(GSE_C["ActionBarBinds"]["Loadouts"][tostring(currentspecid)]) do
+        for i, j in pairs(GSE_C["ActionBarBinds"]["LoadOuts"][tostring(currentspecid)]) do
             local success =
                 pcall(
                 function()
