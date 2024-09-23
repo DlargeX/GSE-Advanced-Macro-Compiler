@@ -411,5 +411,8 @@ globals = {
     "NOT_BOUND",
     "strsplittable",
     "GetActionInfo",
-    "GetBindingByKey"
+    "GetBindingByKey",
+    "ConsolePort",
+    "Bartender4",
+    "Settings"
 }

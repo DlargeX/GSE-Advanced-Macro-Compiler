@@ -11,6 +11,19 @@ function GSE.DeleteSequence(classid, sequenceName)
     GSESequences[tonumber(classid)][sequenceName] = nil
 end
 
+local missingVariables = {}
+local function manageMissingVariable(varname)
+    if not missingVariables[varname] then
+        GSE.Print(L["Missing Variable "] .. varname, "GSE " .. Statics.DebugModules["API"])
+        missingVariables[varname] = 0
+    end
+    missingVariables[varname] = missingVariables[varname] + 1
+    if missingVariables[varname] > 100 then
+        GSE.Print(L["Missing Variable "] .. varname, "GSE " .. Statics.DebugModules["API"])
+        missingVariables[varname] = 0
+    end
+end
+
 function GSE.CloneSequence(orig)
     local orig_type = type(orig)
     local copy
@@ -183,18 +196,21 @@ function GSE.ReloadSequences()
     GSE.ManageMacros()
 end
 
-function GSE.PerformReloadSequences()
+function GSE.PerformReloadSequences(force)
     GSE.PrintDebugMessage("Reloading Sequences", Statics.DebugModules["Storage"])
-
+    local func = GSE.UpdateSequence
+    if force then
+        func = GSE.OOCUpdateSequence
+    end
     for name, sequence in pairs(GSE.Library[GSE.GetCurrentClassID()]) do
         if not sequence.MetaData.Disabled then
-            GSE.UpdateSequence(name, sequence.Macros[GSE.GetActiveSequenceVersion(name)])
+            func(name, sequence.Macros[GSE.GetActiveSequenceVersion(name)])
         end
     end
     if not GSE.isEmpty(GSE.Library[0]) then
         for name, sequence in pairs(GSE.Library[0]) do
             if GSE.isEmpty(sequence.MetaData.Disabled) then
-                GSE.UpdateSequence(name, sequence.Macros[GSE.GetActiveSequenceVersion(name)])
+                func(name, sequence.Macros[GSE.GetActiveSequenceVersion(name)])
             end
         end
     end
@@ -528,19 +544,22 @@ function GSE.UpdateIcon(self, reset)
         if GSE.ButtonOverrides then
             for k, v in pairs(GSE.ButtonOverrides) do
                 if v == gsebutton and _G[k] then
-                    local parent, slot = _G[k] and _G[k]:GetParent():GetParent(), _G[k] and _G[k]:GetID()
-                    local page = parent and parent:GetAttribute("actionpage")
-                    local action = page and slot and slot > 0 and (slot + page * 12 - 12)
-                    if action then
-                        local at = GetActionInfo(action)
-                        if GSE.isEmpty(at) then
-                            _G[k].icon:SetTexture(spellinfo.iconID)
-                            _G[k].icon:Show()
-                            _G[k].TextOverlayContainer.Count:SetText(gsebutton)
-                            _G[k].TextOverlayContainer.Count:SetTextScale(0.6)
+                    if string.sub(k, 1, 5) == "ElvUI" or string.sub(k, 1, 4) == "CPB_" or string.sub(k, 1, 3) == "BT4" then
+                        _G[k].icon:SetTexture(spellinfo.iconID)
+                    else
+                        local parent, slot = _G[k] and _G[k]:GetParent():GetParent(), _G[k] and _G[k]:GetID()
+                        local page = parent and parent:GetAttribute("actionpage")
+                        local action = page and slot and slot > 0 and (slot + page * 12 - 12)
+                        if action then
+                            local at = GetActionInfo(action)
+                            if GSE.isEmpty(at) then
+                                _G[k].icon:SetTexture(spellinfo.iconID)
+                                _G[k].icon:Show()
+                                _G[k].TextOverlayContainer.Count:SetText(gsebutton)
+                                _G[k].TextOverlayContainer.Count:SetTextScale(0.6)
+                            end
                         end
                     end
-                    break
                 end
             end
         end
@@ -661,16 +680,23 @@ local function buildAction(action, metaData, variables)
         local spelllist = {}
         for k, v in pairs(action) do
             local value = v
-            if k == "Disabled" or type(value) == "boolean" then
+            if k == "Disabled" or type(value) == "boolean" or k == "Type" or k == "Interval" then
                 -- we dont want to do anything here
-            elseif k ~= "Type" then
+            else
                 if string.sub(value, 1, 1) == "=" then
-                    local tempval = loadstring("return " .. string.sub(value, 2, string.len(value)))()
-                    if tempval then
-                        value = tempval
-                    else
-                        GSE.Print("Error processing Variable value. " .. value, Statics.DebugModules["API"])
-                    end
+                    xpcall(
+                        function()
+                            local tempval = loadstring("return " .. string.sub(value, 2, string.len(value)))()
+                            if tempval then
+                                value = tostring(tempval)
+                            else
+                                GSE.Print(L["There was an error processing "] .. value, Statics.DebugModules["API"])
+                            end
+                        end,
+                        function(err)
+                            manageMissingVariable(string.sub(value, 2, string.len(value)))
+                        end
+                    )
                 end
 
                 if k == "spell" then
@@ -691,6 +717,37 @@ local function buildAction(action, metaData, variables)
         end
         return spelllist
     end
+end
+
+local function processRepeats(actionList)
+    local inserts = {}
+    local removes = {}
+    for k, v in ipairs(actionList) do
+        if type(v) == "table" and v.Action and v.Interval then
+            table.insert(inserts, {Action = v.Action, Interval = v.Interval + 1, Start = k})
+            table.insert(removes, k)
+        end
+    end
+
+    for i = #removes, 1, -1 do
+        table.remove(actionList, removes[i])
+    end
+
+    for _, v in ipairs(inserts) do
+        local startInterval = v["Interval"]
+        if startInterval == 1 then
+            startInterval = 2
+        end
+        local insertcount = math.ceil((#actionList - v["Start"]) / startInterval)
+        insertcount = math.ceil((#actionList + insertcount - v["Start"]) / startInterval)
+        local interval = v["Interval"]
+        table.insert(actionList, v["Start"], v["Action"])
+        for i = 1, insertcount do
+            local insertpos = v["Start"] + i * interval
+            table.insert(actionList, insertpos, v["Action"])
+        end
+    end
+    return actionList
 end
 
 function GSE.processAction(action, metaData, variables)
@@ -753,7 +810,7 @@ function GSE.processAction(action, metaData, variables)
             end
         end
         -- process repeats for the block
-        return returnActions
+        return processRepeats(GSE.FlattenTable(returnActions))
     elseif action.Type == Statics.Actions.Pause then
         local PauseActions = {}
         local clicks = action.Clicks and action.Clicks or 0
@@ -807,6 +864,20 @@ function GSE.processAction(action, metaData, variables)
     elseif action.Type == Statics.Actions.Action then
         local builtstuff = buildAction(action, metaData)
         return builtstuff
+    elseif action.Type == Statics.Actions.Repeat then
+        if GSE.isEmpty(action.Interval) then
+            if not GSE.isEmpty(action.Repeat) then
+                action.Interval = action.Repeat
+                action.Repeat = nil
+            else
+                action.Interval = 2
+            end
+        end
+        local returnAction = {
+            ["Action"] = buildAction(action, metaData),
+            ["Interval"] = action.Interval
+        }
+        return returnAction
     end
 end
 
@@ -860,7 +931,7 @@ function GSE.CompileTemplate(macro)
     end
     local compiledMacro = GSE.processAction(actions, template.InbuiltVariables, template.Variables)
 
-    return GSE.FlattenTable(compiledMacro), template
+    return processRepeats(GSE.FlattenTable(compiledMacro)), template
 end
 
 local function PCallCreateGSE3Button(spelllist, name, combatReset)
@@ -1095,8 +1166,7 @@ function GSE.CompileMacroText(text, mode)
     end
     local lines = GSE.SplitMeIntolines(text)
     for k, v in ipairs(lines) do
-        local value = v
-        v = GSE.UnEscapeString(v)
+        local value = GSE.UnEscapeString(v)
         if mode == Statics.TranslatorMode.String then
             if string.sub(value, 1, 1) == "=" then
                 local functionresult, error = loadstring("return " .. string.sub(value, 2, string.len(value)))
@@ -1105,18 +1175,22 @@ function GSE.CompileMacroText(text, mode)
                     GSE.Print(L["There was an error processing "] .. v, L["Variables"])
                     GSE.Print(error, L["Variables"])
                 end
-
-                if GSE.isEmpty(functionresult) then
-                    value = " "
-                end
                 if functionresult and type(functionresult) == "function" then
-                    value = functionresult()
+                    if pcall(functionresult) then
+                        value = functionresult()
+                    else
+                        value = ""
+                    end
                 end
             end
-            if string.sub(value, 1, 2) == "--" then
+            if value and string.len(value) > 2 and string.sub(value, 1, 2) == "--" then
                 lines[k] = "" -- strip the comments
             else
-                lines[k] = GSE.TranslateString(value, mode, false)
+                if value then
+                    lines[k] = GSE.TranslateString(value, mode, false)
+                else
+                    lines[k] = ""
+                end
             end
         else
             lines[k] = GSE.TranslateString(value, mode, false)

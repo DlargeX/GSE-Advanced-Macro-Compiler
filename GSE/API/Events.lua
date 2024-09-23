@@ -106,38 +106,78 @@ local function overrideActionButton(Button, Sequence, force)
         GSE.ButtonOverrides = {}
     end
 
-    if not InCombatLockdown() and (not GSE.ButtonOverrides[Button] or force) then
-        SHBT:WrapScript(
-            _G[Button],
-            "OnClick",
-            [[
+    if string.sub(Button, 1, 5) == "ElvUI" or string.sub(Button, 1, 4) == "CPB_" or string.sub(Button, 1, 3) == "BT4" then
+        if _G[Button] and _G[Button].SetState then
+            local state = "1"
+            --_G[Button]:GetAttribute("state"),
+            if string.sub(Button, 1, 3) == "BT4" then
+                state = "0"
+            end
+            _G[Button]:SetAttribute("gse-button", Sequence)
+            _G[Button]:SetAttribute("gse-state", state)
+            _G[Button]:SetState(
+                state,
+                "custom",
+                {
+                    func = function(self)
+                        local gsestate = self:GetAttribute("gse-state")
+                        local bstate = self:GetAttribute("state")
+                        if gsestate == bstate then
+                            self:SetAttribute("type", "click")
+                            self:SetAttribute("clickbutton", _G[self:GetAttribute("gse-button")])
+                            print("state updated")
+                        end
+                    end,
+                    tooltip = "GSE: " .. Sequence,
+                    texture = "Interface\\Addons\\GSE_GUI\\Assets\\GSE_Logo_Dark_512.blp"
+                }
+            )
+            GSE.ButtonOverrides[Button] = Sequence
+            _G[Button]:SetAttribute("type", "click")
+            _G[Button]:SetAttribute("clickbutton", _G[Sequence])
+        end
+    else
+        if not InCombatLockdown() then
+            if (not GSE.ButtonOverrides[Button] or force) then
+                SHBT:WrapScript(
+                    _G[Button],
+                    "OnClick",
+                    [[
     local parent, slot = self and self:GetParent():GetParent(), self and self:GetID()
     local page = parent and parent:GetAttribute("actionpage")
     local action = page and slot and slot > 0 and (slot + page*12 - 12)
-    if action then
-        local at, id = GetActionInfo(action)
-        if at and id then
-            self:SetAttribute("type", "action")
-            self:SetAttribute('action', action)
+    if action or HasOverrideActionBar() then
+        if HasOverrideActionBar() then
+            _G["OverrideActionBarButton2"]:Click()
         else
-            self:SetAttribute("type", "click")
+            local at, id = GetActionInfo(action)
+            if at and id then
+                self:SetAttribute("type", "action")
+                self:SetAttribute('action', action)
+            else
+                self:SetAttribute("type", "click")
+            end
         end
     end
 ]]
-        )
-        _G[Button]:SetAttribute("type", "click")
+                )
+                _G[Button]:SetAttribute("type", "click")
 
-        GSE.ButtonOverrides[Button] = Sequence
+                GSE.ButtonOverrides[Button] = Sequence
 
-    --if number and GetBindingByKey(number) and string.upper(GetBindingByKey(number)) == string.upper(Button) then
-    --SetBindingClick(number, Button, _G[Button])
-    --end
-    end
-    if not InCombatLockdown() then
-        _G[Button]:SetAttribute("clickbutton", _G[Sequence])
+            --if number and GetBindingByKey(number) and string.upper(GetBindingByKey(number)) == string.upper(Button) then
+            --SetBindingClick(number, Button, _G[Button])
+            --end
+            end
+
+            _G[Button]:SetAttribute("clickbutton", _G[Sequence])
+        end
     end
 end
 local function LoadOverrides(force)
+    if GSE.isEmpty(GSE.ButtonOverrides) then
+        GSE.ButtonOverrides = {}
+    end
     if GSE.isEmpty(GSE_C["ActionBarBinds"]) then
         GSE_C["ActionBarBinds"] = {}
     end
@@ -154,6 +194,21 @@ local function LoadOverrides(force)
         GSE_C["ActionBarBinds"]["LoadOuts"][tostring(GetSpecialization())] = {}
     end
     if not InCombatLockdown() then
+        for k, _ in pairs(GSE.ButtonOverrides) do
+            -- revert all buttons
+            if string.sub(k, 1, 5) == "ElvUI" or string.sub(k, 1, 4) == "CPB_" or string.sub(k, 1, 3) == "BT4" then
+                local state = "1"
+                --_G[Button]:GetAttribute("state"),
+                if string.sub(k, 1, 3) == "BT4" then
+                    state = "0"
+                end
+                _G[k]:SetState(state, "action", tonumber(string.match(k, "%d+$")))
+            else
+                _G[k]:SetAttribute("type", "action")
+            end
+        end
+        GSE.ButtonOverrides = {}
+
         for k, v in pairs(GSE_C["ActionBarBinds"]["Specialisations"][tostring(GetSpecialization())]) do
             overrideActionButton(k, v, force)
         end
@@ -168,9 +223,6 @@ local function LoadOverrides(force)
          then
             GSE.PrintDebugMessage("changing from ", tostring(GSE.GetSelectedLoadoutConfigID()), "EVENTS")
             for k, v in pairs(GSE_C["ActionBarBinds"]["LoadOuts"][tostring(GetSpecialization())][selected]) do
-                if GSE.isEmpty(GSE.ButtonOverrides) then
-                    GSE.ButtonOverrides = {}
-                end
                 overrideActionButton(k, v, force)
                 GSE.ButtonOverrides[v] = k
             end
@@ -223,8 +275,10 @@ function GSE:PLAYER_ENTERING_WORLD()
     GSE.currentZone = GetRealZoneText()
     GSE.PlayerEntered = true
     LoadKeyBindings(GSE.PlayerEntered)
+    GSE.PerformReloadSequences(true)
+
+    LoadOverrides()
     GSE:ZONE_CHANGED_NEW_AREA()
-    C_Timer.After(10, LoadOverrides)
 end
 
 function GSE:ADDON_LOADED(event, addon)
@@ -272,18 +326,6 @@ function GSE:ADDON_LOADED(event, addon)
         GSE:SendMessage(Statics.CoreLoadedMessage)
 
         -- Register the Sample Macros
-        local seqnames = {}
-        -- table.insert(seqnames, "Assorted Sample Macros")
-        -- GSE.RegisterAddon("Samples", GSE.VersionString, seqnames)
-
-        -- GSE:RegisterMessage(Statics.ReloadMessage, "processReload")
-
-        -- table.insert(seqnames, "GSE2 Macros")
-        -- GSE.RegisterAddon("GSE2Library", GSE.VersionString, seqnames)
-
-        -- GSE:RegisterMessage(Statics.ReloadMessage, "processReload")
-
-        LibStub("AceConfigDialog-3.0"):AddToBlizOptions("GSE", "|cffff0000GSE:|r Advanced Macro Compiler")
         if not GSEOptions.HideLoginMessage then
             GSE.Print(
                 GSEOptions.AuthorColour ..
@@ -411,8 +453,8 @@ function GSE:PLAYER_SPECIALIZATION_CHANGED()
     end
     if not InCombatLockdown() then
         LoadKeyBindings(GSE.PlayerEntered)
-        LoadOverrides()
         GSE.ReloadSequences()
+        LoadOverrides()
     end
 end
 
