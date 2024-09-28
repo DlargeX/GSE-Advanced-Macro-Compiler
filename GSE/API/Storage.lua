@@ -234,11 +234,9 @@ end
 function GSE.ResetButtons()
     for k, _ in pairs(GSE.UsedSequences) do
         local gsebutton = _G[k]
-        if gsebutton:GetAttribute("combatreset") == true then
-            gsebutton:SetAttribute("step", 1)
-            GSE.UpdateIcon(gsebutton, true)
-            GSE.UsedSequences[k] = nil
-        end
+        gsebutton:SetAttribute("step", 1)
+        GSE.UpdateIcon(gsebutton, true)
+        GSE.UsedSequences[k] = nil
     end
 end
 
@@ -475,34 +473,52 @@ function GSE.GetMacroIcon(classid, sequenceIndex)
     end
 end
 
-function GSE.UpdateIcon(self, reset)
+function GSE.GetSpellsFromString(str)
+    local spellinfo = {}
+    if string.sub(str, 12) == "/click GSE.P" then
+        spellinfo.name = "GSE Pause"
+        spellinfo.iconID = Statics.ActionsIcons.Pause
+    else
+        local searching = true
+        for cmd, oetc in gmatch(str or "", "/(%w+)%s+([^\n]+)") do
+            if Statics.CastCmds[strlower(cmd)] or strlower(cmd) == "castsequence" then
+                local _, _, etc = GSE.GetConditionalsFromString("/" .. cmd .. " " .. oetc)
+                if string.sub(etc, 1, 1) == "/" then
+                    etc = oetc
+                end
+                if strlower(cmd) == "use" and tonumber(etc) <= 16 then
+                    -- we have a trinket
+                else
+                    local spell, _ = SecureCmdOptionParse(etc)
+                    if spell then
+                        spellinfo = C_Spell.GetSpellInfo(spell)
+                    end
+                end
+            end
+        end
+    end
+    if spellinfo and spellinfo.name then
+        return spellinfo
+    end
+end
+
+function GSE.UpdateIcon(self, reseticon)
     local step = self:GetAttribute("step") or 1
     local gsebutton = self:GetName()
     local mods = self:GetAttribute("localmods") or nil
     local executionseq = GSE.SequencesExec[gsebutton]
     local foundSpell = executionseq[step].spell
     local spellinfo = {}
-    if executionseq[step].type == "macro" and executionseq[step].macrotext then
-        local searching = true
-        if string.sub(executionseq[step].macrotext, 12) == "/click GSE.P" then
-            spellinfo.name = "GSE Pause"
-            spellinfo.iconID = Statics.ActionsIcons.Pause
+
+    local reset = self:GetAttribute("combatreset") and self:GetAttribute("combatreset") or false
+    if reseticon == true then
+        spellinfo.name = gsebutton
+        spellinfo.iconID = "Interface\\Addons\\GSE_GUI\\Assets\\GSE_Logo_Dark_512.blp"
+        foundSpell = gsebutton
+    elseif executionseq[step].type == "macro" and executionseq[step].macrotext then
+        spellinfo = GSE.GetSpellsFromString(executionseq[step].macrotext)
+        if spellinfo and spellinfo.name then
             foundSpell = spellinfo.name
-        else
-            for cmd, etc in gmatch(executionseq[step].macrotext or "", "/(%w+)%s+([^\n]+)") do
-                if searching then
-                    if Statics.CastCmds[strlower(cmd)] or strlower(cmd) == "castsequence" then
-                        local spell, target = SecureCmdOptionParse(etc)
-                        if spell then
-                            spellinfo = C_Spell.GetSpellInfo(spell)
-                            if spellinfo then
-                                foundSpell = spellinfo.name
-                                searching = false
-                            end
-                        end
-                    end
-                end
-            end
         end
     elseif executionseq[step].type == "macro" then
         local mname, micon = GetMacroInfo(executionseq[step].macro)
@@ -522,6 +538,9 @@ function GSE.UpdateIcon(self, reset)
         spellinfo = C_Spell.GetSpellInfo(executionseq[step].spell)
         foundSpell = spellinfo.name
     end
+    if executionseq[step].Icon then
+        spellinfo.iconID = executionseq[step].Icon
+    end
     if mods then
         local modlist = {}
         for _, j in ipairs(strsplittable("|", mods)) do
@@ -536,7 +555,7 @@ function GSE.UpdateIcon(self, reset)
             WeakAuras.ScanEvents("GSE_MODS_VISIBLE", gsebutton, modlist)
         end
     end
-    if foundSpell then
+    if spellinfo.iconID then
         if WeakAuras then
             WeakAuras.ScanEvents("GSE_SEQUENCE_ICON_UPDATE", gsebutton, spellinfo)
         end
@@ -1042,6 +1061,8 @@ end
             elseif k == "macro" then
                 self:SetAttribute("macrotext", nil )
                 self:SetAttribute("unit", nil )
+            elseif k == "Icon" then
+                -- skip
             end
             self:SetAttribute(k, v )
         end

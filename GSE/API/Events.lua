@@ -114,18 +114,14 @@ local function overrideActionButton(Button, Sequence, force)
                 state = "0"
             end
             _G[Button]:SetAttribute("gse-button", Sequence)
-            _G[Button]:SetAttribute("gse-state", state)
             _G[Button]:SetState(
                 state,
                 "custom",
                 {
                     func = function(self)
-                        local gsestate = self:GetAttribute("gse-state")
-                        local bstate = self:GetAttribute("state")
-                        if gsestate == bstate then
+                        if not InCombatLockdown() then
                             self:SetAttribute("type", "click")
                             self:SetAttribute("clickbutton", _G[self:GetAttribute("gse-button")])
-                            print("state updated")
                         end
                     end,
                     tooltip = "GSE: " .. Sequence,
@@ -135,6 +131,16 @@ local function overrideActionButton(Button, Sequence, force)
             GSE.ButtonOverrides[Button] = Sequence
             _G[Button]:SetAttribute("type", "click")
             _G[Button]:SetAttribute("clickbutton", _G[Sequence])
+            SHBT:WrapScript(
+                _G[Button],
+                "OnClick",
+                [[
+                    type = self:GetAttribute("type")
+                    if type == "custom" then
+                        self:SetAttribute("type", "click")
+                    end
+                ]]
+            )
         end
     else
         if not InCombatLockdown() then
