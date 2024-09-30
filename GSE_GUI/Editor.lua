@@ -300,7 +300,7 @@ local function listSequences()
     local names = GSE.GetSequenceNames()
     local cclassid = tonumber(-1)
     local cspecid = tonumber(-1)
-    for k, _ in GSE.pairsByKeys(names) do
+    for k, _ in GSE.pairsByKeys(names, GSE.AlphabeticalTableSortAlgorithm) do
         local elements = GSE.split(k, ",")
         local tclassid = tonumber(elements[1])
         local specid = tonumber(elements[2])
@@ -321,22 +321,24 @@ local function listSequences()
             sectionspacer2:SetFont(fontName, 2, fontFlags)
             leftscroll:AddChild(sectionspacer2)
         end
-        if cspecid ~= specid then
-            cspecid = specid
-            local specialisationname = select(2, GetSpecializationInfoByID(specid))
-            local sectionspacer3 = AceGUI:Create("Label")
-            sectionspacer3:SetText(" ")
-            sectionspacer3:SetFont(fontName, 4, fontFlags)
-            leftscroll:AddChild(sectionspacer3)
-            local sectionheader2 = AceGUI:Create("Label")
-            sectionheader2:SetText(specialisationname)
-            sectionheader2:SetFont(fontName, fontHeight, fontFlags)
-            sectionheader2:SetColor(GSE.GUIGetColour(GSEOptions.STANDARDFUNCS))
-            leftscroll:AddChild(sectionheader2)
-            local sectionspacer4 = AceGUI:Create("Label")
-            sectionspacer4:SetText(" ")
-            sectionspacer4:SetFont(fontName, 2, fontFlags)
-            leftscroll:AddChild(sectionspacer4)
+        if GetSpecializationInfoByID then
+            if cspecid ~= specid then
+                cspecid = specid
+                local specialisationname = select(2, GetSpecializationInfoByID(specid))
+                local sectionspacer3 = AceGUI:Create("Label")
+                sectionspacer3:SetText(" ")
+                sectionspacer3:SetFont(fontName, 4, fontFlags)
+                leftscroll:AddChild(sectionspacer3)
+                local sectionheader2 = AceGUI:Create("Label")
+                sectionheader2:SetText(specialisationname)
+                sectionheader2:SetFont(fontName, fontHeight, fontFlags)
+                sectionheader2:SetColor(GSE.GUIGetColour(GSEOptions.STANDARDFUNCS))
+                leftscroll:AddChild(sectionheader2)
+                local sectionspacer4 = AceGUI:Create("Label")
+                sectionspacer4:SetText(" ")
+                sectionspacer4:SetFont(fontName, 2, fontFlags)
+                leftscroll:AddChild(sectionspacer4)
+            end
         end
         CreateSequencePanels(leftscroll, k)
     end
