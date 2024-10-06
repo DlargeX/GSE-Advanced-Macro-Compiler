@@ -6,8 +6,12 @@ local Statics = GSE.Static
 
 --- Return the characters current spec id
 function GSE.GetCurrentSpecID()
-    local currentSpec = GetSpecialization()
-    return currentSpec and select(1, GetSpecializationInfo(currentSpec)) or 0
+    if GSE.GameMode <= 4 then
+        return GSE.GetCurrentClassID() and GSE.GetCurrentClassID()
+    else
+        local currentSpec = GetSpecialization()
+        return currentSpec and select(1, GetSpecializationInfo(currentSpec)) or 0
+    end
 end
 
 --- Return the current GCD for the current character
@@ -125,7 +129,7 @@ end
 
 --- Experimental attempt to load a WeakAuras string.
 function GSE.LoadWeakAura(str)
-    if IsAddOnLoaded("WeakAuras") then
+    if C_AddOns.IsAddOnLoaded("WeakAuras") then
         WeakAuras.OpenOptions()
         WeakAuras.OpenOptions()
         WeakAuras.Import(str)

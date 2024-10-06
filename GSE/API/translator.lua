@@ -57,9 +57,25 @@ function GSE.TranslateString(instring, mode, cleanNewLines, dropAbsolute)
                             output = output .. mods .. " "
                             GSE.PrintDebugMessage("GSE.TranslateSpell conditionals found ", GNOME)
                         end
-                        GSE.PrintDebugMessage("output: " .. output .. " mods: " .. mods .. " etc: " .. etc, GNOME)
-
-                        output = output .. GSEOptions.KEYWORD .. trinketstuff .. Statics.StringReset
+                        if tonumber(trinketstuff) and tonumber(trinketstuff) < 17 then
+                            output = output .. GSEOptions.KEYWORD .. trinketstuff .. Statics.StringReset
+                        else
+                            if not cleanNewLines then
+                                trinketstuff = string.match(trinketstuff, "^%s*(.-)%s*$")
+                            end
+                            if string.sub(trinketstuff, 1, 1) == "!" then
+                                trinketstuff = string.sub(trinketstuff, 2)
+                                output = output .. "!"
+                            end
+                            local foundspell, returnval =
+                                GSE.TranslateSpell(trinketstuff, mode, (cleanNewLines and cleanNewLines or false), true)
+                            if foundspell then
+                                output = output .. returnval
+                            else
+                                GSE.PrintDebugMessage("Did not find : " .. trinketstuff, GNOME)
+                                output = output .. trinketstuff
+                            end
+                        end
                     elseif string.lower(cmd) == "castsequence" then
                         GSE.PrintDebugMessage("attempting to split : " .. etc, GNOME)
                         for _, y in ipairs(GSE.split(etc, ";")) do
@@ -77,7 +93,7 @@ function GSE.TranslateString(instring, mode, cleanNewLines, dropAbsolute)
                                 end
                                 local foundspell, returnval =
                                     GSE.TranslateSpell(uetc, mode, (cleanNewLines and cleanNewLines or false), absolute)
-                                output = output .. GSEOptions.KEYWORD .. returnval .. Statics.StringReset .. ", "
+                                output = output .. returnval .. ", "
                             end
                             output = output .. ";"
                         end
@@ -112,7 +128,7 @@ function GSE.TranslateString(instring, mode, cleanNewLines, dropAbsolute)
                         local foundspell, returnval =
                             GSE.TranslateSpell(etc, mode, (cleanNewLines and cleanNewLines or false), absolute)
                         if foundspell then
-                            output = output .. GSEOptions.KEYWORD .. returnval .. Statics.StringReset
+                            output = output .. returnval
                         else
                             GSE.PrintDebugMessage("Did not find : " .. etc, GNOME)
                             output = output .. etc
@@ -212,6 +228,7 @@ function GSE.TranslateSpell(str, mode, cleanNewLines, absolute)
                 if test then
                     local currentSpell = FindSpellOverrideByID(test)
                     if currentSpell then
+                        ---@diagnostic disable-next-line: cast-local-type
                         etc = currentSpell
                     end
                 end
@@ -308,14 +325,22 @@ function GSE.GetSpellId(spellstring, mode, absolute)
     if GSE.isEmpty(GSESpellCache[GetLocale()]) then
         GSESpellCache[GetLocale()] = {}
     end
-    local returnval
-    local name, rank, spellId = C_Spell.GetSpellInfo(spellstring)
-    if type(name) == "table" then
-        -- in TWW GetSpellInfo was changed to return a table instead of multiple valueStep
-        rank = name.rank and name.rank or nil
-        spellId = name.spellID
-        name = name.name
+    local returnval, name, rank, spellId
+
+    local spellinfo = C_Spell.GetSpellInfo(spellstring)
+    if not spellinfo then
+        if type(spellstring) == "string" then
+            ---@diagnostic disable-next-line: missing-fields
+            spellinfo = {}
+            spellinfo.name = spellstring
+            if GSESpellCache[GetLocale()][spellinfo] then
+                spellinfo.spellID = GSESpellCache[GetLocale()][spellinfo]
+            end
+        end
     end
+    rank = spellinfo.rank and spellinfo.rank or nil
+    spellId = spellinfo.spellID and spellinfo.spellID or nil
+    name = spellinfo.name
     if mode ~= Statics.TranslatorMode.ID then
         if not GSE.isEmpty(rank) then
             returnval = name .. "(" .. rank .. ")"

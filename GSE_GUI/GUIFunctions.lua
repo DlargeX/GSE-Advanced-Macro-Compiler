@@ -64,13 +64,13 @@ function GSE.GUILoadEditor(key, recordedstring)
       sequence.Macros[1]["Actions"] = nil
       local recordedMacro = {}
       for _, v in ipairs(GSE.SplitMeIntolines(recordedstring)) do
-        local spellid = GSE.GetSpellId(v, Statics.TranslatorMode.ID)
+        print(v)
+        local spellid = GSE.TranslateString(v, Statics.TranslatorMode.ID)
         if spellid then
           local action = {
             ["Type"] = Statics.Actions.Action,
-            ["type"] = "spell",
-            ["spell"] = spellid,
-            ["unit"] = "target"
+            ["type"] = "macro",
+            ["macro"] = spellid
           }
           table.insert(recordedMacro, action)
         end
@@ -84,8 +84,10 @@ function GSE.GUILoadEditor(key, recordedstring)
     sequenceName = elements[3]
     --sequence = GSE.CloneSequence(GSE.Library[classid][sequenceName], true)
     local _, seq = GSE.DecodeMessage(GSESequences[classid][sequenceName])
-    sequence = seq[2]
-    GSE.GUIEditFrame.NewSequence = false
+    if seq then
+      sequence = seq[2]
+      GSE.GUIEditFrame.NewSequence = false
+    end
   end
   if GSE.isEmpty(sequence.WeakAuras) then
     sequence.WeakAuras = {}
