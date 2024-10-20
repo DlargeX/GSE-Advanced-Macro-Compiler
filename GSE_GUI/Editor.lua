@@ -2280,11 +2280,15 @@ if GSE.isEmpty(GSE.CreateIconControl) then
             return lbl
         end
         local spellinfo = {}
+        spellinfo.iconID = Statics.QuestionMarkIconID
 
         if action.type == "macro" then
             local macro = GSE.UnEscapeString(action.macro)
             if string.sub(macro, 1, 1) == "/" then
                 local spellstuff = GSE.GetSpellsFromString(macro)
+                if spellstuff and #spellstuff > 1 then
+                    spellstuff = spellstuff[1]
+                end
                 if spellstuff then
                     spellinfo = spellstuff
                 end

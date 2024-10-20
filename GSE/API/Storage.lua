@@ -476,13 +476,30 @@ end
 
 function GSE.GetSpellsFromString(str)
     local spellinfo = {}
-    if string.sub(str, 12) == "/click GSE.P" then
+    if string.sub(str, 14) == "/click GSE.Pau" then
         spellinfo.name = "GSE Pause"
         spellinfo.iconID = Statics.ActionsIcons.Pause
     else
-        local searching = true
         for cmd, oetc in gmatch(str or "", "/(%w+)%s+([^\n]+)") do
-            if Statics.CastCmds[strlower(cmd)] or strlower(cmd) == "castsequence" then
+            if strlower(cmd) == "castsequence" then
+                local returnspells = {}
+                local processed = {}
+                for _, y in ipairs(GSE.split(oetc, ";")) do
+                    for _, v in ipairs(GSE.SplitCastSequence(y)) do
+                        local _, _, etc = GSE.GetConditionalsFromString(v)
+                        local elements = GSE.split(etc, ",")
+
+                        for _, v1 in ipairs(elements) do
+                            local spellstuff = C_Spell.GetSpellInfo(string.trim(v1))
+                            if spellstuff and spellstuff.name and not processed[v1] then
+                                table.insert(returnspells, spellstuff)
+                                processed[v1] = true
+                            end
+                        end
+                    end
+                end
+                return returnspells
+            elseif Statics.CastCmds[strlower(cmd)] then
                 local _, _, etc = GSE.GetConditionalsFromString("/" .. cmd .. " " .. oetc)
                 if string.sub(etc, 1, 1) == "/" then
                     etc = oetc
@@ -510,6 +527,7 @@ function GSE.UpdateIcon(self, reseticon)
     local executionseq = GSE.SequencesExec[gsebutton]
     local foundSpell = executionseq[step].spell
     local spellinfo = {}
+    spellinfo.iconID = Statics.QuestionMarkIconID
 
     local reset = self:GetAttribute("combatreset") and self:GetAttribute("combatreset") or false
     if reseticon == true then
@@ -518,6 +536,9 @@ function GSE.UpdateIcon(self, reseticon)
         foundSpell = gsebutton
     elseif executionseq[step].type == "macro" and executionseq[step].macrotext then
         spellinfo = GSE.GetSpellsFromString(executionseq[step].macrotext)
+        if spellinfo and #spellinfo > 1 then
+            spellinfo = spellinfo[1]
+        end
         if spellinfo and spellinfo.name then
             foundSpell = spellinfo.name
         end
@@ -540,6 +561,9 @@ function GSE.UpdateIcon(self, reseticon)
         foundSpell = spellinfo.name
     end
     if executionseq[step].Icon then
+        if not spellinfo then
+            spellinfo = {}
+        end
         spellinfo.iconID = executionseq[step].Icon
     end
     if mods then
@@ -979,6 +1003,7 @@ local function PCallCreateGSE3Button(spelllist, name, combatReset)
         gsebutton = CreateFrame("Button", name, nil, "SecureActionButtonTemplate,SecureHandlerBaseTemplate")
         gsebutton:SetAttribute("type", "spell")
         gsebutton:SetAttribute("step", 1)
+        gsebutton:SetAttribute("name", name)
         gsebutton.UpdateIcon = GSE.UpdateIcon
         gsebutton:RegisterForClicks("AnyUp", "AnyDown")
 
