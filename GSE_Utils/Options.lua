@@ -460,22 +460,6 @@ function GSE.GetOptionsTable()
                 type = "group",
                 order = 5,
                 args = {
-                    clearCommonKeyBindsTitle = {
-                        type = "header",
-                        name = L["Clear Common Keybindings"],
-                        order = 500
-                    },
-                    clearCommonKeyBinds = {
-                        name = L["Clear Keybindings"],
-                        desc = L[
-                            "This function will remove the SHIFT+N, ALT+N and CTRL+N keybindings for this character.  Useful if [mod:shift] etc conditions don't work in game."
-                        ],
-                        type = "execute",
-                        func = function(info, val)
-                            GSE.ClearCommonKeyBinds()
-                        end,
-                        order = 501
-                    },
                     spellCachetitle = {
                         type = "header",
                         name = L["Spell Cache Editor"],
@@ -563,6 +547,26 @@ function GSE.GetOptionsTable()
                             end
                         end,
                         order = 541
+                    },
+                    disableExeperimental = {
+                        type = "header",
+                        name = L["Experimental Features"],
+                        order = 550
+                    },
+                    disableLAB = {
+                        name = L["Disable inbuilt LibActionButton"],
+                        desc = L[
+                            "LibActionButton is used by ConsolePort and Bartender.  Disabling this will use the standard version of this library."
+                        ],
+                        type = "toggle",
+                        set = function(info, val)
+                            GSEOptions.DisableExperimentalLAB = val
+                            StaticPopup_Show("GSE_ConfirmReloadUIDialog")
+                        end,
+                        get = function(info)
+                            return GSEOptions.DisableExperimentalLAB
+                        end,
+                        order = 551
                     }
                 }
             },

@@ -118,18 +118,22 @@ end
 
 local SHBT = CreateFrame("Frame", nil, nil, "SecureHandlerBaseTemplate,SecureFrameTemplate")
 
-local function overrideActionButton(Button, Sequence, force)
+local function overrideActionButton(savedBind, force)
     if GSE.isEmpty(GSE.ButtonOverrides) then
         GSE.ButtonOverrides = {}
     end
+    local Button = savedBind.Bind
+    if not _G[Button] then
+        return
+    end
+    local Sequence = savedBind.Sequence
+    local state =
+        savedBind.State and savedBind.State or string.sub(Button, 1, 3) == "BT4" and "0" or
+        string.sub(Button, 1, 4) == "CPB_" and "" or
+        "1"
 
-    if string.sub(Button, 1, 4) == "CPB_" or string.sub(Button, 1, 3) == "BT4" then
+    if (string.sub(Button, 1, 3) == "BT4") and not GSEOptions.DisableExperimentalLAB then
         if _G[Button] and _G[Button].SetState then
-            local state = "1"
-            --_G[Button]:GetAttribute("state"),
-            if string.sub(Button, 1, 3) == "BT4" then
-                state = "0"
-            end
             _G[Button]:SetAttribute("gse-button", Sequence)
             _G[Button]:SetState(
                 state,
@@ -149,13 +153,10 @@ local function overrideActionButton(Button, Sequence, force)
             _G[Button]:SetAttribute("type", "click")
             _G[Button]:SetAttribute("clickbutton", _G[Sequence])
         end
-    elseif string.sub(Button, 1, 5) == "ElvUI" then
+    elseif
+        string.sub(Button, 1, 5) == "ElvUI" or string.sub(Button, 1, 4) == "CPB_" or GSEOptions.DisableExperimentalLAB
+     then
         if _G[Button] and _G[Button].SetState then
-            local state = "1"
-            --_G[Button]:GetAttribute("state"),
-            if string.sub(Button, 1, 3) == "BT4" then
-                state = "0"
-            end
             _G[Button]:SetAttribute("gse-button", Sequence)
             _G[Button]:SetState(
                 state,
@@ -168,7 +169,9 @@ local function overrideActionButton(Button, Sequence, force)
                         end
                     end,
                     tooltip = "GSE: " .. Sequence,
-                    texture = "Interface\\Addons\\GSE_GUI\\Assets\\GSE_Logo_Dark_512.blp"
+                    texture = "Interface\\Addons\\GSE_GUI\\Assets\\GSE_Logo_Dark_512.blp",
+                    type = "click",
+                    clickbutton = _G[Sequence]
                 }
             )
             GSE.ButtonOverrides[Button] = Sequence
@@ -251,6 +254,8 @@ local function LoadOverrides(force)
                 --_G[Button]:GetAttribute("state"),
                 if string.sub(k, 1, 3) == "BT4" then
                     state = "0"
+                elseif string.sub(k, 1, 4) == "CPB_" then
+                    state = ""
                 end
                 _G[k]:SetState(state, "action", tonumber(string.match(k, "%d+$")))
             else
@@ -259,8 +264,8 @@ local function LoadOverrides(force)
         end
         GSE.ButtonOverrides = {}
 
-        for k, v in pairs(GSE_C["ActionBarBinds"]["Specialisations"][GetSpec()]) do
-            overrideActionButton(k, v, force)
+        for _, v in pairs(GSE_C["ActionBarBinds"]["Specialisations"][GetSpec()]) do
+            overrideActionButton(v, force)
         end
         if C_ClassTalents and C_ClassTalents.GetLastSelectedSavedConfigID then
             local selected = playerSpec() and tostring(C_ClassTalents.GetLastSelectedSavedConfigID(playerSpec()))
@@ -271,8 +276,8 @@ local function LoadOverrides(force)
              then
                 GSE.PrintDebugMessage("changing from " .. tostring(GSE.GetSelectedLoadoutConfigID()), "EVENTS")
                 for k, v in pairs(GSE_C["ActionBarBinds"]["LoadOuts"][GetSpec()][selected]) do
-                    overrideActionButton(k, v, force)
-                    GSE.ButtonOverrides[v] = k
+                    overrideActionButton(v, force)
+                    GSE.ButtonOverrides[v.Sequence] = k
                 end
             end
         end
@@ -333,10 +338,19 @@ function GSE:PLAYER_ENTERING_WORLD()
 
     LoadOverrides()
     GSE:ZONE_CHANGED_NEW_AREA()
+    if ConsolePort then
+        C_Timer.After(
+            10,
+            function()
+                LoadOverrides()
+            end
+        )
+    end
 end
 
 function GSE:ADDON_LOADED(event, addon)
     if addon == GNOME then
+        GSE.setupLAB()
         local char = UnitFullName("player")
         local realm = GetRealmName()
 
