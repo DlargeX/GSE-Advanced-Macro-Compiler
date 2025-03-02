@@ -79,20 +79,30 @@ function createArchive(done) {
 }
 
 function publishArchive(done) {
-  const { Webhook, MessageBuilder } = require("discord-webhook-node");
-  const hook = new Webhook(process.env.DISCORD_WEBHOOK);
+  const {
+    EmbedBuilder,
+    WebhookClient,
+    AttachmentBuilder,
+  } = require("discord.js");
 
-  const embed = new MessageBuilder()
+  const hook = new WebhookClient({ url: process.env.DISCORD_WEBHOOK });
+
+  const embed = new EmbedBuilder()
     // .setTitle(`GSE ${BuildVersion}`)
-    .setAuthor(
-      "GSE Updater",
-      "https://media.forgecdn.net/attachments/372/575/gse2-logo-dark-2x.png",
-      "https://github.com/TimothyLuke/GSE-Advanced-Macro-Compiler.com"
-    )
+    .setAuthor({
+      name: "GSE Updater",
+      iconURL:
+        "https://media.forgecdn.net/attachments/372/575/gse2-logo-dark-2x.png",
+      url: "https://github.com/TimothyLuke/GSE-Advanced-Macro-Compiler.com",
+    })
     //   .setURL(
     //     "https://www.https://github.com/TimothyLuke/GSE-Advanced-Macro-Compiler.com"
     //   )
-    .addField("New GSE Update", `${BuildNumber} Released`, true)
+    .addFields({
+      name: "New GSE Update",
+      value: `${BuildNumber} Released`,
+      inline: true,
+    })
     //   .addField("Second field", "this is not inline")
     .setColor("#00b0f4")
     .setThumbnail(
@@ -106,15 +116,14 @@ function publishArchive(done) {
     //   )
     .setTimestamp();
 
-  embed.files = [
-    {
-      attachment: `GSE-${BuildNumber}.zip`,
-      name: `GSE-${BuildNumber}.zip`,
-    },
-  ];
+  var file = new AttachmentBuilder(`./GSE-${BuildNumber}.zip`);
+
   try {
-    hook.send(embed);
-    hook.sendFile(`GSE-${BuildNumber}.zip`).then(done);
+    hook.send({
+      embeds: [embed],
+      files: [file],
+    });
+    //hook.sendFile(`GSE-${BuildNumber}.zip`).then(done);
   } catch (err) {
     console.log(err);
     return done(err);
@@ -147,6 +156,7 @@ async.waterfall(
     async.apply(updateToc, "GSE_GUI", "GSE_GUI"),
     async.apply(updateToc, "GSE_LDB", "GSE_LDB"),
     async.apply(updateToc, "GSE_Utils", "GSE_Utils"),
+    async.apply(updateToc, "GSE_Options", "GSE_Options"),
     deleteExistingZips,
     addExtras,
     createArchive,

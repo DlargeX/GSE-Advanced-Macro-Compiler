@@ -355,7 +355,7 @@ local function showMacro(node)
                 function(widget, button, down)
                     -- if button == "RightButton" then
                     MenuUtil.CreateContextMenu(
-                        managedMacro.editBox,
+                        macroframe.frame,
                         function(ownerRegion, rootDescription)
                             rootDescription:CreateTitle(L["Insert GSE Variable"])
                             for k, _ in pairs(GSEVariables) do
@@ -496,13 +496,14 @@ local function buildMacroHeader(node)
     selpanel:SetLayout("List")
 
     macroframe.panels[node.value] = selpanel
+
     selpanel:SetCallback(
         "OnClick",
         function(widget, _, selected, button)
             macroframe:clearpanels(widget, selected)
             if button == "RightButton" then
                 MenuUtil.CreateContextMenu(
-                    selpanel,
+                    macroframe.frame,
                     function(ownerRegion, rootDescription)
                         rootDescription:CreateTitle(L["Manage Macros"])
                         rootDescription:CreateButton(

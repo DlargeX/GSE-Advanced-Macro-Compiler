@@ -294,8 +294,14 @@ end
 
 --- Load a serialised Sequence
 function GSE.ImportSerialisedSequence(importstring, forcereplace)
-    local decompresssuccess, actiontable = GSE.DecodeMessage(importstring)
+    local decompresssuccess, actiontable
+    if type(importstring) == "table" then
+        decompresssuccess, actiontable = true, importstring
+    else
+        decompresssuccess, actiontable = GSE.DecodeMessage(importstring)
+    end
     GSE.PrintDebugMessage(string.format("Decomsuccess: %s ", tostring(decompresssuccess)), Statics.SourceTransmission)
+
     if decompresssuccess and actiontable then
         if actiontable.type == "COLLECTION" then
             actiontable = actiontable.payload
@@ -681,6 +687,14 @@ function GSE:GSSlash(input)
     elseif command == "forceclean" then
         GSE.CleanOrphanSequences()
         GSE.CleanMacroLibrary(true)
+    elseif command == "export" then
+        if GSE.Patron then
+            GSE.CheckGUI()
+            if GSE.UnsavedOptions["GUI"] and GSE.GUIAdvancedExport then
+                GSE.GUIAdvancedExport(GSE.GUIExportframe)
+                GSE.GUIExportframe:Show()
+            end
+        end
     elseif command == "showdebugoutput" then
         StaticPopup_Show("GS-DebugOutput")
     elseif command == "record" then
@@ -775,6 +789,5 @@ colorTable["/cast"] = castColor
 colorTable[0] = "|r"
 
 Statics.IndentationColorTable = colorTable
-GSE:CreateConfigPanels()
 
 GSE.Utils = true

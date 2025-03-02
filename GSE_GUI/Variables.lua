@@ -125,13 +125,14 @@ local function createVariableHeader(name, variable)
     label:SetFontObject(font)
     label:SetText(name)
     selpanel.label = label
+
     selpanel:SetCallback(
         "OnClick",
         function(widget, _, selected, button)
             variablesframe:clearpanels(widget, selected)
             if button == "RightButton" then
                 MenuUtil.CreateContextMenu(
-                    leftscroll,
+                    variablesframe.frame,
                     function(ownerRegion, rootDescription)
                         rootDescription:CreateTitle(L["Manage Variables"])
                         rootDescription:CreateButton(
@@ -473,7 +474,7 @@ leftscroll.frame:SetScript(
     function(Self, button)
         if button == "RightButton" then
             MenuUtil.CreateContextMenu(
-                leftscroll,
+                variablesframe.frame,
                 function(ownerRegion, rootDescription)
                     rootDescription:CreateTitle(L["Variable Menu"])
                     rootDescription:CreateButton(

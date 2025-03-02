@@ -24,7 +24,6 @@ editframe.Scenario = 1
 editframe.ClassID = GSE.GetCurrentClassID()
 editframe.save = false
 editframe.SelectedTab = "group"
-editframe.AdvancedEditor = false
 editframe.statusText = "GSE: " .. GSE.VersionString
 editframe.booleanFunctions = {}
 editframe.frame:SetClampRectInsets(-10, -10, -10, -10)
@@ -76,6 +75,39 @@ editframe.panels = {}
 
 GSE.GUIEditFrame = editframe
 
+local function GUIUpdateSequenceDefinition(classid, SequenceName, sequence)
+    sequence.LastUpdated = GSE.GetTimestamp()
+
+    if not GSE.isEmpty(SequenceName) then
+        if GSE.isEmpty(classid) then
+            classid = GSE.GetCurrentClassID()
+        end
+        sequence.MetaData.Name = SequenceName
+        if not GSE.isEmpty(SequenceName) then
+            local vals = {}
+            vals.action = "Replace"
+            vals.sequencename = SequenceName
+            vals.sequence = sequence
+            vals.classid = classid
+            if editframe.NewSequence then
+                if GSE.ObjectExists(SequenceName) then
+                    editframe:SetStatusText(
+                        string.format(L["Sequence Name %s is in Use. Please choose a different name."], SequenceName)
+                    )
+                    editframe.nameeditbox:SetText(
+                        GSEOptions.UNKNOWN .. editframe.nameeditbox:GetText() .. Statics.StringReset
+                    )
+                    editframe.nameeditbox:SetFocus()
+                    return
+                end
+                editframe.NewSequence = false
+            end
+            table.insert(GSE.OOCQueue, vals)
+            editframe:SetStatusText(L["Save pending for "] .. SequenceName)
+        end
+    end
+end
+
 local basecontainer = AceGUI:Create("SimpleGroup")
 basecontainer:SetLayout("Flow")
 basecontainer:SetAutoAdjustHeight(false)
@@ -95,12 +127,13 @@ local leftscroll = AceGUI:Create("ScrollFrame")
 leftscroll:SetLayout("List") -- probably?
 leftScrollContainer:AddChild(leftscroll)
 leftscroll:SetFullWidth(true)
+
 leftscroll.frame:SetScript(
     "OnMouseDown",
     function(Self, button)
         if button == "RightButton" then
             MenuUtil.CreateContextMenu(
-                leftscroll,
+                editframe.frame,
                 function(ownerRegion, rootDescription)
                     rootDescription:CreateTitle(L["Sequence Editor"])
                     rootDescription:CreateButton(
@@ -181,13 +214,14 @@ local function CreateSequencePanels(container, key)
     selpanel:SetAutoAdjustHeight(false)
     selpanel:SetLayout("Flow")
     editframe.panels[key] = selpanel
+
     selpanel:SetCallback(
         "OnClick",
         function(widget, _, selected, button)
             editframe:clearpanels(widget, selected)
             if button == "RightButton" then
                 MenuUtil.CreateContextMenu(
-                    selpanel,
+                    editframe.frame,
                     function(ownerRegion, rootDescription)
                         rootDescription:CreateTitle(L["Sequence Editor"])
                         rootDescription:CreateButton(
@@ -525,7 +559,7 @@ function GSE.GUIEditorPerformLayout()
         "OnClick",
         function()
             if GSE.isEmpty(editframe.invalidPause) then
-                GSE.GUIEditFrame:SetStatusText(L["Save pending for "] .. nameeditbox:GetText())
+                editframe:SetStatusText(L["Save pending for "] .. nameeditbox:GetText())
                 local _, _, _, tocversion = GetBuildInfo()
                 editframe.Sequence.MetaData.ManualIntervention = true
                 editframe.Sequence.MetaData.GSEVersion = GSE.VersionNumber
@@ -533,7 +567,7 @@ function GSE.GUIEditorPerformLayout()
                 editframe.Sequence.MetaData.TOC = tocversion
                 nameeditbox:SetText(nameeditbox:GetText())
                 editframe.SequenceName = GSE.UnEscapeString(nameeditbox:GetText())
-                GSE.GUIUpdateSequenceDefinition(editframe.ClassID, editframe.SequenceName, editframe.Sequence)
+                GUIUpdateSequenceDefinition(editframe.ClassID, editframe.SequenceName, editframe.Sequence)
                 editframe.save = true
             else
                 GSE.Print(L["Error processing Custom Pause Value.  You will need to recheck your macros."], "ERROR")
@@ -583,7 +617,7 @@ function GSE.GUIEditorPerformLayout()
     editButtonGroup:AddChild(transbutton)
     editButtonGroup:AddChild(editOptionsbutton)
     rightContainer:AddChild(editButtonGroup)
-    GSE.GUIEditFrame:SetStatusText(editframe.statusText)
+    editframe:SetStatusText(editframe.statusText)
 end
 
 function GSE.GetVersionList()
@@ -1205,10 +1239,120 @@ end
 
 local function ChooseVersionTab(version, scrollpos)
     GSE.GUIEditorPerformLayout()
-    GSE.GUIEditFrame.ContentContainer:SelectTab(tostring(version))
+    editframe.ContentContainer:SelectTab(tostring(version))
     if not GSE.isEmpty(editframe.scrollContainer) and scrollpos > 0 then
         editframe.scrollContainer:SetScroll(scrollpos)
     end
+end
+
+local function drawRawEditor(container, version, tablestring)
+    container:ReleaseChildren()
+
+    local seqTableEditbox = AceGUI:Create("MultiLineEditBox")
+    seqTableEditbox:SetLabel(L["Sequence"])
+    seqTableEditbox:DisableButton(true)
+    seqTableEditbox:SetNumLines(#GSE.SplitMeIntoLines(tablestring))
+    seqTableEditbox:SetRelativeWidth(0.9)
+    seqTableEditbox:SetHeight(editframe.Height - 320)
+    seqTableEditbox:SetText(tablestring)
+    --         seqTableEditbox:SetCallback(
+    --     "OnTextChanged",
+    --     function(self, event, text)
+    --         tablestring = IndentationLib.encode(text)
+    --     end
+    -- )
+    -- seqTableEditbox:SetCallback(
+    --     "OnEditFocusLost",
+    --     function()
+    --         local variabletext = IndentationLib.decode(seqTableEditbox:GetText())
+    --         tablestring = variabletext
+    --     end
+    -- )
+    IndentationLib.enable(seqTableEditbox.editBox, Statics.IndentationColorTable, 4)
+
+    local compileButton = AceGUI:Create("Button")
+    compileButton:SetText(L["Compile"])
+    compileButton:SetWidth(130)
+    compileButton:SetCallback(
+        "OnClick",
+        function()
+            local tab
+            local load = "return " .. seqTableEditbox:GetText()
+            local func, err = loadstring(load)
+            if err then
+                GSE.Print(L["Unable to process content.  Fix table and try again."], L["GSE Raw Editor"])
+                GSE.Print(err, L["GSE Raw Editor"])
+            else
+                tab = func()
+                if not GSE.isEmpty(tab) then
+                    editframe.Sequence.Macros[version] = tab
+                    GSE.GUIEditorPerformLayout()
+                    editframe.ContentContainer:SelectTab(version)
+                else
+                    GSE.Print(L["Unable to process content.  Fix table and try again."], L["GSE Raw Editor"])
+                end
+            end
+        end
+    )
+    -- compileButton:SetCallback(
+    --     "OnEnter",
+    --     function()
+    --         GSE.CreateToolTip(
+    --             L["Delete Version"],
+    --             L[
+    --                 "Delete this verion of the macro.  This can be undone by closing this window and not saving the change.  \nThis is different to the Delete button below which will delete this entire macro."
+    --             ],
+    --             editframe
+    --         )
+    --     end
+    -- )
+    compileButton:SetCallback(
+        "OnLeave",
+        function()
+            GSE.ClearTooltip(editframe)
+        end
+    )
+
+    local cancelButton = AceGUI:Create("Button")
+    cancelButton:SetText(L["Cancel"])
+    cancelButton:SetWidth(130)
+    cancelButton:SetCallback(
+        "OnClick",
+        function()
+            GSE.GUIEditorPerformLayout()
+            editframe.ContentContainer:SelectTab(version)
+        end
+    )
+    -- cancelButton:SetCallback(
+    --     "OnEnter",
+    --     function()
+    --         GSE.CreateToolTip(
+    --             L["Delete Version"],
+    --             L[
+    --                 "Delete this verion of the macro.  This can be undone by closing this window and not saving the change.  \nThis is different to the Delete button below which will delete this entire macro."
+    --             ],
+    --             editframe
+    --         )
+    --     end
+    -- )
+    cancelButton:SetCallback(
+        "OnLeave",
+        function()
+            GSE.ClearTooltip(editframe)
+        end
+    )
+    container:AddChild(seqTableEditbox)
+
+    local toolcontainer = AceGUI:Create("InlineGroup")
+    toolcontainer:SetLayout("Flow")
+
+    toolcontainer:SetWidth(container.frame:GetWidth() - 50)
+    toolcontainer:AddChild(compileButton)
+    toolcontainer:AddChild(cancelButton)
+    container:AddChild(toolcontainer)
+    -- _G["GSE3"].TextBox:SetText(tablestring)
+    -- _G["GSE3"].Version = version
+    -- _G["GSE3"]:Show()
 end
 
 function GSE:GUIDrawMacroEditor(container, version)
@@ -1313,12 +1457,12 @@ function GSE:GUIDrawMacroEditor(container, version)
     raweditbutton:SetCallback(
         "OnClick",
         function()
-            local GSE3Macro = GSE.UnEscapeTableRecursive(editframe.Sequence.Macros[version])
-            _G["GSE3"].TextBox:SetText(GSE.Dump(GSE3Macro))
-            _G["GSE3"].Version = version
-            _G["GSE3"]:Show()
-            editframe.AdvancedEditor = true
-            editframe:Hide()
+            drawRawEditor(
+                contentcontainer,
+                version,
+                GSE.Dump(GSE.UnEscapeTableRecursive(editframe.Sequence.Macros[version]))
+            )
+
             GSE.WagoAnalytics:Switch("Raw Edit", true)
         end
     )
@@ -2131,7 +2275,7 @@ local function GetBlockToolbar(
 end
 
 if GSE.isEmpty(GSE.CreateSpellEditBox) then
-    GSE.CreateSpellEditBox = function(action, version, keyPath, sequence, compiledMacro)
+    GSE.CreateSpellEditBox = function(action, version, keyPath, sequence, compiledMacro, frame)
         local spellEditBox = AceGUI:Create("EditBox")
 
         spellEditBox:SetWidth(250)
@@ -2269,7 +2413,7 @@ if GSE.isEmpty(GSE.CreateSpellEditBox) then
 end
 
 if GSE.isEmpty(GSE.CreateIconControl) then
-    GSE.CreateIconControl = function(action, version, keyPath, sequence)
+    GSE.CreateIconControl = function(action, version, keyPath, sequence, frame)
         local lbl = AceGUI:Create("Label")
         lbl:SetFontObject(GameFontNormalLarge)
         lbl:SetWidth(15)
@@ -2418,7 +2562,7 @@ local function drawAction(container, action, version, keyPath)
                     returnAction["MS"] = tonumber(text)
                 end
                 editframe.Sequence.Macros[version].Actions[keyPath] = returnAction
-                GSE.GUIEditFrame:SetStatusText(editframe.statusText)
+                editframe:SetStatusText(editframe.statusText)
             end
         )
 
@@ -2475,7 +2619,7 @@ local function drawAction(container, action, version, keyPath)
         compiledMacro:SetFullHeight(true)
 
         local spellEditBox, macroeditbox =
-            GSE.CreateSpellEditBox(action, version, keyPath, editframe.Sequence, compiledMacro)
+            GSE.CreateSpellEditBox(action, version, keyPath, editframe.Sequence, compiledMacro, editframe.frame)
 
         local unitEditBox = AceGUI:Create("EditBox")
         unitEditBox:SetLabel(L["Unit Name"])
@@ -2505,7 +2649,7 @@ local function drawAction(container, action, version, keyPath)
         local typegroup = AceGUI:Create("SimpleGroup")
         typegroup:SetFullWidth(true)
         typegroup:SetLayout("Flow")
-        local actionicon = GSE.CreateIconControl(action, version, keyPath, editframe.Sequence)
+        local actionicon = GSE.CreateIconControl(action, version, keyPath, editframe.Sequence, editframe.frame)
         typegroup:AddChild(actionicon)
         local spellradio = AceGUI:Create("CheckBox")
         spellradio:SetType("radio")
@@ -2904,7 +3048,7 @@ local function drawAction(container, action, version, keyPath)
                 "OnTabPressed",
                 function(widget, button, down)
                     MenuUtil.CreateContextMenu(
-                        booleanEditBox,
+                        editframe.frame,
                         function(ownerRegion, rootDescription)
                             rootDescription:CreateTitle(L["Insert GSE Variable"])
                             for k, _ in pairs(GSEVariables) do
@@ -3201,7 +3345,7 @@ function GSE.GUISelectEditorTab(container, event, group)
         container:ReleaseChildren()
         editframe.SelectedTab = group
 
-        editframe.nameeditbox:SetText(GSE.GUIEditFrame.SequenceName)
+        editframe.nameeditbox:SetText(editframe.SequenceName)
         if group == "config" then
             GSE:GUIDrawMetadataEditor(container)
         elseif group == "new" then
@@ -3334,12 +3478,12 @@ function GSE.GUIDeleteVersion(version)
     table.remove(sequence.Macros, version)
     printtext = printtext .. " " .. L["This change will not come into effect until you save this macro."]
     GSE.GUIEditorPerformLayout()
-    GSE.GUIEditFrame.ContentContainer:SelectTab("config")
-    GSE.GUIEditFrame:SetStatusText(string.format(printtext, version))
+    editframe.ContentContainer:SelectTab("config")
+    editframe:SetStatusText(string.format(printtext, version))
     C_Timer.After(
         5,
         function()
-            GSE.GUIEditFrame:SetStatusText(editframe.statusText)
+            editframe:SetStatusText(editframe.statusText)
         end
     )
 end

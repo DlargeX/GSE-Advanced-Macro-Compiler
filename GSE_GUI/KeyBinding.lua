@@ -314,7 +314,10 @@ local function showKeybind(bind, button, specialization, loadout, type)
         LABButtonState:SetDisabled(true)
         if bind and _G[bind] and _G[bind].state_types then
             local states = {["Default"] = "Default"}
-            local default = string.sub(bind, 1, 3) == "BT4" and "0" or string.sub(bind, 1, 4) == "CPB_" and "" or "1"
+            local default =
+                string.sub(bind, 1, 3) == "BT4" and "0" or string.sub(bind, 1, 4) == "NDui_" and "2" or
+                string.sub(bind, 1, 4) == "CPB_" and "" or
+                "1"
             for k, _ in pairs(_G[bind].state_types) do
                 if k ~= default and k ~= bind then
                     states[k] = k
@@ -347,6 +350,12 @@ local function showKeybind(bind, button, specialization, loadout, type)
         if ElvUI then
             for i = 15, 1, -1 do
                 table.insert(buttonnames, 1, "ElvUI_Bar" .. i .. "Button")
+            end
+        end
+
+        if NDui then
+            for i = 15, 1, -1 do
+                table.insert(buttonnames, 1, "NDui_ActionBar" .. i .. "Button")
             end
         end
 
@@ -412,6 +421,7 @@ local function showKeybind(bind, button, specialization, loadout, type)
                 end
             end
         end
+
         local striplist = {}
         if bind then
             buttonlist[bind] = bind
@@ -435,7 +445,9 @@ local function showKeybind(bind, button, specialization, loadout, type)
                     local states = {["Default"] = "Default"}
 
                     local default =
-                        string.sub(bind, 1, 3) == "BT4" and "0" or string.sub(bind, 1, 4) == "CPB_" and "" or "1"
+                        string.sub(bind, 1, 3) == "BT4" and "0" or string.sub(bind, 1, 4) == "NDui_" and "2" or
+                        string.sub(bind, 1, 4) == "CPB_" and "" or
+                        "1"
                     for k, _ in pairs(_G[bind].state_types) do
                         if k ~= default and k ~= bind then
                             states[k] = k
@@ -457,6 +469,7 @@ local function showKeybind(bind, button, specialization, loadout, type)
                 local default =
                     string.sub(ActionButtonList:GetValue(), 1, 3) == "BT4" and "0" or
                     string.sub(ActionButtonList:GetValue(), 1, 4) == "CPB_" and "" or
+                    string.sub(ActionButtonList:GetValue(), 1, 4) == "NDui_" and "2" or
                     "1"
                 if key == default or key == "Default" then
                     button["State"] = nil
@@ -644,7 +657,10 @@ local function buildKeybindHeader(specialization, bind, button, loadout, type)
     hlabel:SetWidth(299)
     hlabel:SetFontObject(font)
     hlabel:SetFont(fontName, fontHeight + 2, fontFlags)
-
+    if not selpanel.GetWindow then
+        selpanel.GetWindow = function()
+        end
+    end
     selpanel:AddChild(hlabel)
     selpanel:SetCallback(
         "OnClick",

@@ -588,19 +588,34 @@ function GSE.UpdateIcon(self, reseticon)
         if GSE.ButtonOverrides then
             for k, v in pairs(GSE.ButtonOverrides) do
                 if v == gsebutton and _G[k] then
-                    if string.sub(k, 1, 5) == "ElvUI" or string.sub(k, 1, 4) == "CPB_" or string.sub(k, 1, 3) == "BT4" then
+                    if
+                        string.sub(k, 1, 5) == "ElvUI" or string.sub(k, 1, 4) == "CPB_" or string.sub(k, 1, 3) == "BT4" or
+                            string.sub(k, 1, 4) == "NDui"
+                     then
                         _G[k].icon:SetTexture(spellinfo.iconID)
                     else
-                        local parent, slot = _G[k] and _G[k]:GetParent():GetParent(), _G[k] and _G[k]:GetID()
-                        local page = parent and parent:GetAttribute("actionpage")
-                        local action = page and slot and slot > 0 and (slot + page * 12 - 12)
-                        if action then
-                            local at = GetActionInfo(action)
-                            if GSE.isEmpty(at) then
+                        if GSE.GameMode == 11 then
+                            local parent, slot = _G[k] and _G[k]:GetParent():GetParent(), _G[k] and _G[k]:GetID()
+                            local page = parent and parent:GetAttribute("actionpage")
+                            local action = page and slot and slot > 0 and (slot + page * 12 - 12)
+                            if action then
+                                local at = GetActionInfo(action)
+                                if GSE.isEmpty(at) then
+                                    _G[k].icon:SetTexture(spellinfo.iconID)
+                                    _G[k].icon:Show()
+                                    _G[k].TextOverlayContainer.Count:SetText(gsebutton)
+                                    _G[k].TextOverlayContainer.Count:SetTextScale(0.6)
+                                end
+                            end
+                        else
+                            if _G[k] then
+                                if not InCombatLockdown() then
+                                    _G[k]:Show()
+                                end
                                 _G[k].icon:SetTexture(spellinfo.iconID)
                                 _G[k].icon:Show()
-                                _G[k].TextOverlayContainer.Count:SetText(gsebutton)
-                                _G[k].TextOverlayContainer.Count:SetTextScale(0.6)
+                            -- _G[k].TextOverlayContainer.Count:SetText(gsebutton)
+                            -- _G[k].TextOverlayContainer.Count:SetTextScale(0.6)
                             end
                         end
                     end
@@ -1211,7 +1226,7 @@ function GSE.CompileMacroText(text, mode)
     if GSE.isEmpty(mode) then
         mode = Statics.TranslatorMode.ID
     end
-    local lines = GSE.SplitMeIntolines(text)
+    local lines = GSE.SplitMeIntoLines(text)
     for k, v in ipairs(lines) do
         local value = GSE.UnEscapeString(v)
         if mode == Statics.TranslatorMode.String then
