@@ -791,3 +791,11 @@ L["Disable inbuilt LibActionButton"] = true
 L["LibActionButton is used by ConsolePort and Bartender.  Disabling this will use the standard version of this library."] =
     true
 L["Button State"] = true
+
+-- #1738
+L["Open %s in New Window"] = true
+L["modified in other window.  This view is now behind the current sequence."] = true
+
+-- #1742
+L["You cannot open a new Sequence Editor window while you are in combat.  Please exit combat and then try again."] =
+    true

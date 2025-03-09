@@ -41,8 +41,8 @@ if macroframe.Width < 700 then
     GSEOptions.macroWidth = macroframe.Width
 end
 macroframe.frame:SetClampRectInsets(-10, -10, -10, -10)
-macroframe.frame:SetHeight(GSEOptions.editorHeight)
-macroframe.frame:SetWidth(GSEOptions.editorWidth)
+macroframe.frame:SetHeight(macroframe.Height)
+macroframe.frame:SetWidth(macroframe.Width)
 
 macroframe:SetTitle(L["Macros"])
 macroframe:SetCallback(
@@ -337,14 +337,15 @@ local function showMacro(node)
         managedMacro:SetCallback(
             "OnTextChanged",
             function(self, _, text)
-                GSE.GUIEditFrame:SetStatusText(L["Save pending for "] .. node.name)
+                macroframe:SetStatusText(L["Save pending for "] .. node.name)
                 source[node.name].managedMacro = GSE.CompileMacroText(text, Statics.TranslatorMode.ID)
                 local compiled = GSE.CompileMacroText(text, Statics.TranslatorMode.String)
                 compiledMacro:SetText(compiled)
                 compiledlinecount:SetText(string.format(L["%s/255 Characters Used"], string.len(compiled)))
                 local oocaction = {
                     ["action"] = "updatemacro",
-                    ["node"] = source[node.name]
+                    ["node"] = source[node.name],
+                    ["status"] = macroframe:SetStatusText()
                 }
                 table.insert(GSE.OOCQueue, oocaction)
             end
@@ -428,12 +429,12 @@ local function showMacro(node)
         macro:SetCallback(
             "OnEnterPressed",
             function(self, _, text)
-                GSE.GUIEditFrame:SetStatusText(L["Save pending for "] .. node.name)
+                macroframe:SetStatusText(L["Save pending for "] .. node.name)
                 node.text = GSE.CompileMacroText(text, Statics.TranslatorMode.String)
                 local oocaction = {
                     ["action"] = "updatemacro",
                     ["node"] = node,
-                    ["status"] = GSE.GUIEditFrame:SetStatusText()
+                    ["status"] = macroframe:SetStatusText()
                 }
                 table.insert(GSE.OOCQueue, oocaction)
             end
