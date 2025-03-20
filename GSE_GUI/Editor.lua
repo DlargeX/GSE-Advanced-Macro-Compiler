@@ -4,6 +4,46 @@ local Statics = GSE.Static
 local AceGUI = LibStub("AceGUI-3.0")
 local L = GSE.L
 
+if GSE.isEmpty(GSE.CreateIconControl) then
+    GSE.CreateIconControl = function(action, version, keyPath, sequence, frame)
+        local lbl = AceGUI:Create("Label")
+        lbl:SetFontObject(GameFontNormalLarge)
+        lbl:SetWidth(15)
+        lbl:SetHeight(15)
+
+        if action.Icon then
+            lbl:SetText("|T" .. action.Icon .. ":0|t")
+            return lbl
+        end
+        local spellinfo = {}
+        spellinfo.iconID = Statics.QuestionMarkIconID
+
+        if action.type == "macro" then
+            local macro = GSE.UnEscapeString(action.macro)
+            if string.sub(macro, 1, 1) == "/" then
+                local spellstuff = GSE.GetSpellsFromString(macro)
+                if spellstuff and #spellstuff > 1 then
+                    spellstuff = spellstuff[1]
+                end
+                if spellstuff then
+                    spellinfo = spellstuff
+                end
+            else
+                spellinfo.name = action.macro
+                local macindex = GetMacroIndexByName(spellinfo.name)
+                local _, iconid, _ = GetMacroInfo(macindex)
+                spellinfo.iconID = iconid
+            end
+        elseif action.type == "Spell" then
+            spellinfo = C_Spell.GetSpellInfo(action.spell)
+        end
+        if spellinfo.iconID then
+            lbl:SetText("|T" .. spellinfo.iconID .. ":0|t")
+        end
+        return lbl
+    end
+end
+
 function GSE.CreateEditor()
     if GSE.isEmpty(GSE.GUI.editors) then
         GSE.GUI.editors = {}
@@ -36,6 +76,31 @@ function GSE.CreateEditor()
     editframe.booleanFunctions = {}
     editframe.frame:SetClampRectInsets(-10, -10, -10, -10)
 
+    local function GUIConfirmDeleteSequence(classid, sequenceName)
+        GSE.DeleteSequence(classid, sequenceName)
+        for _, v in ipairs(GSE.GUI.editors) do
+            v.listSequences()
+        end
+    end
+
+    --- This function pops up a confirmation dialog.
+    local function GUIDeleteSequence(classid, sequenceName)
+        StaticPopupDialogs["GSE-DeleteMacroDialog"].text =
+            string.format(
+            L[
+                "Are you sure you want to delete %s?  This will delete the macro and all versions.  This action cannot be undone."
+            ],
+            sequenceName
+        )
+        StaticPopupDialogs["GSE-DeleteMacroDialog"].OnAccept = function(self, data)
+            GUIConfirmDeleteSequence(classid, sequenceName)
+        end
+
+        StaticPopup_Show("GSE-DeleteMacroDialog")
+    end
+
+    --- This function then deletes the macro.
+
     if
         GSEOptions.frameLocations and GSEOptions.frameLocations.sequenceeditor and
             GSEOptions.frameLocations.sequenceeditor.left and
@@ -43,20 +108,20 @@ function GSE.CreateEditor()
      then
         local editorleft = GSEOptions.frameLocations.sequenceeditor.left
         local editortop = GSEOptions.frameLocations.sequenceeditor.top
-        if #GSE.GUI.editors > 1 then
-            editframe:SetPoint(
-                "TOPLEFT",
-                UIParent,
-                "BOTTOMLEFT",
-                editorleft + (10 * #GSE.GUI.editors),
-                editortop - (10 * #GSE.GUI.editors)
-            )
+
+        if #GSE.GUI.editors > 0 then
+            editorleft = editorleft + 30
+            editortop = editortop - 30
+            editframe:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", editorleft, editortop)
+            GSEOptions.frameLocations.sequenceeditor.left = editorleft
+            GSEOptions.frameLocations.sequenceeditor.top = editortop
         else
             editframe:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", editorleft, editortop)
         end
     end
     editframe.Height = GSEOptions.editorHeight and GSEOptions.editorHeight or 500
     editframe.Width = GSEOptions.editorWidth and GSEOptions.editorWidth or 700
+
     if editframe.Height < 500 then
         editframe.Height = 500
         GSEOptions.editorHeight = editframe.Height
@@ -84,8 +149,25 @@ function GSE.CreateEditor()
             GSEOptions.frameLocations.sequenceeditor.top = bottom + h
             GSEOptions.editorHeight = h
             GSEOptions.editorWidth = w
-            editframe:Hide()
-            editframe:ReleaseChildren()
+            self:Hide()
+            self.Sequence = nil
+            self.SequenceName = nil
+            self.Raid = nil
+            self.PVP = nil
+            self.Mythic = nil
+            self.Dungeon = nil
+            self.Heroic = nil
+            self.Party = nil
+            self.Arena = nil
+            self.Timewalking = nil
+            self.MythicPlus = nil
+            self.Scenario = nil
+            self.ClassID = nil
+            self.save = nil
+            self.SelectedTab = nil
+            self.statusText = nil
+            self.booleanFunctions = nil
+            self:ReleaseChildren()
             for k, v in ipairs(GSE.GUI.editors) do
                 if editframe == v then
                     table.remove(GSE.GUI.editors, k)
@@ -141,67 +223,25 @@ function GSE.CreateEditor()
     end
 
     local basecontainer = AceGUI:Create("SimpleGroup")
-    basecontainer:SetLayout("Flow")
-    basecontainer:SetAutoAdjustHeight(false)
-    basecontainer:SetHeight(editframe.Height - 100)
+    basecontainer:SetLayout("Fill")
+    basecontainer:SetFullHeight(true)
     basecontainer:SetFullWidth(true)
+    -- basecontainer:SetAutoAdjustHeight(false)
+    -- basecontainer:SetHeight(editframe.Height - 100)
+    -- basecontainer:SetWidth(editframe.Width)
     editframe:AddChild(basecontainer)
 
-    local leftScrollContainer = AceGUI:Create("SimpleGroup")
-    leftScrollContainer:SetWidth(200)
+    local treeContainer = AceGUI:Create("TreeGroup")
+    treeContainer:SetFullHeight(true)
+    treeContainer:SetFullWidth(true)
 
-    leftScrollContainer:SetHeight(editframe.Height - 90)
-    leftScrollContainer:SetLayout("Fill") -- important!
-
-    basecontainer:AddChild(leftScrollContainer)
-
-    local leftscroll = AceGUI:Create("ScrollFrame")
-    leftscroll:SetLayout("List") -- probably?
-    leftScrollContainer:AddChild(leftscroll)
-    leftscroll:SetFullWidth(true)
-
-    leftscroll.frame:SetScript(
-        "OnMouseDown",
-        function(Self, button)
-            if button == "RightButton" then
-                MenuUtil.CreateContextMenu(
-                    editframe.frame,
-                    function(ownerRegion, rootDescription)
-                        rootDescription:CreateTitle(L["Sequence Editor"])
-                        rootDescription:CreateButton(
-                            L["New"],
-                            function()
-                                GSE.GUILoadEditor(editframe)
-                            end
-                        )
-                        rootDescription:CreateButton(
-                            L["Import"],
-                            function()
-                                GSE.ShowImport()
-                            end
-                        )
-                        rootDescription:CreateButton(
-                            L["Keybindings"],
-                            function()
-                                GSE.ShowKeyBindings()
-                            end
-                        )
-                    end
-                )
-            end
-        end
-    )
-
+    editframe.treeContainer = treeContainer
     local spacer = AceGUI:Create("Label")
     spacer:SetWidth(10)
-    basecontainer:AddChild(spacer)
+    --basecontainer:AddChild(spacer)
 
-    local rightContainer = AceGUI:Create("SimpleGroup")
-    editframe.rightContainer = rightContainer
-    rightContainer:SetLayout("List")
-    rightContainer:SetWidth(editframe.Width - 250)
-    rightContainer:SetHeight(editframe.Height - 90)
-    basecontainer:AddChild(rightContainer)
+    --basecontainer:AddChild(rightContainer)
+    basecontainer:AddChild(treeContainer)
     local function ChooseVersionTab(version, scrollpos)
         editframe.GUIEditorPerformLayout()
         editframe.ContentContainer:SelectTab(tostring(version))
@@ -223,7 +263,7 @@ function GSE.CreateEditor()
 
             local metaKeyGroup = AceGUI:Create("KeyGroup")
             metaKeyGroup:SetLayout("Flow")
-            metaKeyGroup:SetWidth(editframe.Width - 100 - 200)
+            metaKeyGroup:SetFullWidth(true)
 
             local disableSequence = AceGUI:Create("CheckBox")
             disableSequence:SetLabel(L["Disable Sequence"])
@@ -327,7 +367,7 @@ function GSE.CreateEditor()
 
             local helpgroup1 = AceGUI:Create("KeyGroup")
             helpgroup1:SetLayout("Flow")
-            helpgroup1:SetWidth(editframe.Width - 100)
+            helpgroup1:SetFullWidth(true)
 
             local helplinkeditbox = AceGUI:Create("EditBox")
             helplinkeditbox:SetLabel(L["Help Link"])
@@ -399,12 +439,12 @@ function GSE.CreateEditor()
 
             local defgroup1 = AceGUI:Create("KeyGroup")
             defgroup1:SetLayout("Flow")
-            defgroup1:SetWidth(editframe.Width - 100 - 200)
+            defgroup1:SetFullWidth(true)
 
             local defaultdropdown = AceGUI:Create("Dropdown")
             defaultdropdown:SetLabel(L["Default Version"])
             defaultdropdown:SetWidth(250)
-            defaultdropdown:SetList(GSE.GetVersionList())
+            defaultdropdown:SetList(editframe.GetVersionList())
             defaultdropdown:SetValue(tostring(editframe.Sequence.MetaData.Default))
             defaultdropdown:SetCallback(
                 "OnValueChanged",
@@ -435,7 +475,7 @@ function GSE.CreateEditor()
             local raiddropdown = AceGUI:Create("Dropdown")
             raiddropdown:SetLabel(L["Raid"])
             raiddropdown:SetWidth(250)
-            raiddropdown:SetList(GSE.GetVersionList())
+            raiddropdown:SetList(editframe.GetVersionList())
             raiddropdown:SetValue(tostring(editframe.Sequence.MetaData.Raid))
             raiddropdown:SetCallback(
                 "OnValueChanged",
@@ -466,12 +506,12 @@ function GSE.CreateEditor()
 
             local defgroup2 = AceGUI:Create("KeyGroup")
             defgroup2:SetLayout("Flow")
-            defgroup2:SetWidth(editframe.Width - 100 - 200)
+            defgroup2:SetFullWidth(true)
 
             local arenadropdown = AceGUI:Create("Dropdown")
             arenadropdown:SetLabel(L["Arena"])
             arenadropdown:SetWidth(250)
-            arenadropdown:SetList(GSE.GetVersionList())
+            arenadropdown:SetList(editframe.GetVersionList())
             arenadropdown:SetValue(tostring(editframe.Sequence.MetaData.Arena))
             arenadropdown:SetCallback(
                 "OnEnter",
@@ -505,7 +545,7 @@ function GSE.CreateEditor()
             local mythicdropdown = AceGUI:Create("Dropdown")
             mythicdropdown:SetLabel(L["Mythic"])
             mythicdropdown:SetWidth(250)
-            mythicdropdown:SetList(GSE.GetVersionList())
+            mythicdropdown:SetList(editframe.GetVersionList())
             mythicdropdown:SetValue(tostring(editframe.Sequence.MetaData.Mythic))
             mythicdropdown:SetCallback(
                 "OnValueChanged",
@@ -536,7 +576,7 @@ function GSE.CreateEditor()
             local pvpdropdown = AceGUI:Create("Dropdown")
             pvpdropdown:SetLabel(L["PVP"])
             pvpdropdown:SetWidth(250)
-            pvpdropdown:SetList(GSE.GetVersionList())
+            pvpdropdown:SetList(editframe.GetVersionList())
             pvpdropdown:SetValue(tostring(editframe.Sequence.MetaData.PVP))
 
             pvpdropdown:SetCallback(
@@ -565,12 +605,12 @@ function GSE.CreateEditor()
 
             local defgroup3 = AceGUI:Create("KeyGroup")
             defgroup3:SetLayout("Flow")
-            defgroup3:SetWidth(editframe.Width - 100 - 200)
+            defgroup3:SetFullWidth(true)
 
             local dungeondropdown = AceGUI:Create("Dropdown")
             dungeondropdown:SetLabel(L["Dungeon"])
             dungeondropdown:SetWidth(250)
-            dungeondropdown:SetList(GSE.GetVersionList())
+            dungeondropdown:SetList(editframe.GetVersionList())
             dungeondropdown:SetValue(tostring(editframe.Sequence.MetaData.Dungeon))
 
             dungeondropdown:SetCallback(
@@ -606,7 +646,7 @@ function GSE.CreateEditor()
             local heroicdropdown = AceGUI:Create("Dropdown")
             heroicdropdown:SetLabel(L["Heroic"])
             heroicdropdown:SetWidth(250)
-            heroicdropdown:SetList(GSE.GetVersionList())
+            heroicdropdown:SetList(editframe.GetVersionList())
             heroicdropdown:SetValue(tostring(editframe.Sequence.MetaData.Heroic))
             heroicdropdown:SetCallback(
                 "OnValueChanged",
@@ -633,12 +673,12 @@ function GSE.CreateEditor()
 
             local defgroup4 = AceGUI:Create("KeyGroup")
             defgroup4:SetLayout("Flow")
-            defgroup4:SetWidth(editframe.Width - 100 - 200)
+            defgroup4:SetFullWidth(true)
 
             local partydropdown = AceGUI:Create("Dropdown")
             partydropdown:SetLabel(L["Party"])
             partydropdown:SetWidth(250)
-            partydropdown:SetList(GSE.GetVersionList())
+            partydropdown:SetList(editframe.GetVersionList())
             partydropdown:SetValue(tostring(editframe.Sequence.MetaData.Party))
             partydropdown:SetCallback(
                 "OnValueChanged",
@@ -672,16 +712,16 @@ function GSE.CreateEditor()
 
             local defgroup5 = AceGUI:Create("KeyGroup")
             defgroup5:SetLayout("Flow")
-            defgroup5:SetWidth(editframe.Width - 100 - 200)
+            defgroup5:SetFullWidth(true)
 
             local defgroup6 = AceGUI:Create("KeyGroup")
             defgroup6:SetLayout("Flow")
-            defgroup6:SetWidth(editframe.Width - 100 - 200)
+            defgroup6:SetFullWidth(true)
 
             local Timewalkingdropdown = AceGUI:Create("Dropdown")
             Timewalkingdropdown:SetLabel(L["Timewalking"])
             Timewalkingdropdown:SetWidth(250)
-            Timewalkingdropdown:SetList(GSE.GetVersionList())
+            Timewalkingdropdown:SetList(editframe.GetVersionList())
             Timewalkingdropdown:SetValue(tostring(editframe.Sequence.MetaData.Timewalking))
             Timewalkingdropdown:SetCallback(
                 "OnValueChanged",
@@ -716,7 +756,7 @@ function GSE.CreateEditor()
             local mythicplusdropdown = AceGUI:Create("Dropdown")
             mythicplusdropdown:SetLabel(L["Mythic+"])
             mythicplusdropdown:SetWidth(250)
-            mythicplusdropdown:SetList(GSE.GetVersionList())
+            mythicplusdropdown:SetList(editframe.GetVersionList())
             mythicplusdropdown:SetValue(tostring(editframe.Sequence.MetaData.MythicPlus))
             mythicplusdropdown:SetCallback(
                 "OnValueChanged",
@@ -748,7 +788,7 @@ function GSE.CreateEditor()
             local scenariodropdown = AceGUI:Create("Dropdown")
             scenariodropdown:SetLabel(L["Scenario"])
             scenariodropdown:SetWidth(250)
-            scenariodropdown:SetList(GSE.GetVersionList())
+            scenariodropdown:SetList(editframe.GetVersionList())
             scenariodropdown:SetValue(tostring(editframe.Sequence.MetaData.Scenario))
             scenariodropdown:SetCallback(
                 "OnValueChanged",
@@ -801,8 +841,8 @@ function GSE.CreateEditor()
         end
         local function DrawTalentsEditor(container)
             local function drawTalent(container, name, talent)
-                local row = AceGUI:Create("InlineGroup")
-                local wide = editframe.Width - 210
+                local row = AceGUI:Create("SimpleGroup")
+
                 local origname = name
                 if GSE.isEmpty(name) then
                     name = "New Loadout"
@@ -817,8 +857,8 @@ function GSE.CreateEditor()
                 row:SetLayout("Flow")
                 row:SetFullWidth(true)
                 local txtname = AceGUI:Create("EditBox")
-                txtname:SetLabel(L["Name"])
-                txtname:SetWidth(wide * 0.1)
+                txtname:SetLabel("")
+                txtname:SetRelativeWidth(0.1)
                 txtname:SetText(name)
                 txtname:SetCallback(
                     "OnTextChanged",
@@ -835,8 +875,8 @@ function GSE.CreateEditor()
                 row:AddChild(txtname)
 
                 local txtloadout = AceGUI:Create("MultiLineEditBox")
-                txtloadout:SetLabel(L["Talent Loadout"])
-                txtloadout:SetWidth(wide * 0.3)
+                txtloadout:SetLabel("")
+                txtloadout:SetRelativeWidth(0.43)
                 txtloadout:SetText(talent.TalentSet)
                 txtloadout:SetNumLines(3)
                 txtloadout:SetCallback(
@@ -850,8 +890,8 @@ function GSE.CreateEditor()
                 row:AddChild(txtloadout)
 
                 local txtdescription = AceGUI:Create("MultiLineEditBox")
-                txtdescription:SetLabel(L["Help Information"])
-                txtdescription:SetWidth(wide * 0.3)
+                txtdescription:SetLabel("")
+                txtdescription:SetRelativeWidth(0.43)
                 txtdescription:SetNumLines(3)
                 txtdescription:SetText(talent.Description)
                 txtdescription:SetCallback(
@@ -867,6 +907,7 @@ function GSE.CreateEditor()
                 local delete = AceGUI:Create("InteractiveLabel")
 
                 delete:SetImageSize(25, 25)
+                delete:SetRelativeWidth(0.04)
                 delete:SetImage(Statics.ActionsIcons.Delete)
                 delete:SetCallback(
                     "OnClick",
@@ -906,19 +947,19 @@ function GSE.CreateEditor()
             header:SetLayout("Flow")
             header:SetFullWidth(true)
             local lblname = AceGUI:Create("Heading")
-            local wide = editframe.Width - 210
+
             lblname:SetText(L["Name"])
-            lblname:SetWidth(wide * 0.1)
+            lblname:SetRelativeWidth(0.1)
             header:AddChild(lblname)
 
             local lbltalentset = AceGUI:Create("Heading")
             lbltalentset:SetText(L["Talent Loadout"])
-            lbltalentset:SetWidth(wide * 0.3)
+            lbltalentset:SetRelativeWidth(0.4)
             header:AddChild(lbltalentset)
 
             local lblDescription = AceGUI:Create("Heading")
             lblDescription:SetText(L["Help Information"])
-            lblDescription:SetWidth(wide * 0.3)
+            lblDescription:SetRelativeWidth(0.4)
             header:AddChild(lblDescription)
             container:AddChild(header)
 
@@ -935,22 +976,10 @@ function GSE.CreateEditor()
                 seqTableEditbox:SetLabel(L["Sequence"])
                 seqTableEditbox:DisableButton(true)
                 seqTableEditbox:SetNumLines(#GSE.SplitMeIntoLines(tablestring))
-                seqTableEditbox:SetRelativeWidth(0.9)
+                seqTableEditbox:SetRelativeWidth(0.95)
                 seqTableEditbox:SetHeight(editframe.Height - 320)
                 seqTableEditbox:SetText(tablestring)
-                --         seqTableEditbox:SetCallback(
-                --     "OnTextChanged",
-                --     function(self, event, text)
-                --         tablestring = IndentationLib.encode(text)
-                --     end
-                -- )
-                -- seqTableEditbox:SetCallback(
-                --     "OnEditFocusLost",
-                --     function()
-                --         local variabletext = IndentationLib.decode(seqTableEditbox:GetText())
-                --         tablestring = variabletext
-                --     end
-                -- )
+
                 IndentationLib.enable(seqTableEditbox.editBox, Statics.IndentationColorTable, 4)
 
                 local compileButton = AceGUI:Create("Button")
@@ -1032,27 +1061,23 @@ function GSE.CreateEditor()
                 local toolcontainer = AceGUI:Create("InlineGroup")
                 toolcontainer:SetLayout("Flow")
 
-                toolcontainer:SetWidth(container.frame:GetWidth() - 50)
+                toolcontainer:SetFullWidth(true)
                 toolcontainer:AddChild(compileButton)
                 toolcontainer:AddChild(cancelButton)
                 container:AddChild(toolcontainer)
-                -- _G["GSE3"].TextBox:SetText(tablestring)
-                -- _G["GSE3"].Version = version
-                -- _G["GSE3"]:Show()
             end
 
             local function drawAction(container, action, version, keyPath)
                 local function GetBlockToolbar(
                     version,
                     path,
-                    width,
                     includeAdd,
                     headingLabel,
                     container,
                     disableMove,
                     disableDelete,
                     dontDeleteLastParent)
-                    local layoutcontainer = AceGUI:Create("KeyGroup")
+                    local layoutcontainer = AceGUI:Create("SimpleGroup")
 
                     local lastPath = path[#path]
 
@@ -1068,7 +1093,7 @@ function GSE.CreateEditor()
                         blocksThisLevel = #editframe.Sequence.Macros[version].Actions[parentPath]
                     end
                     layoutcontainer:SetLayout("Flow")
-                    layoutcontainer:SetWidth(width)
+                    layoutcontainer:SetFullWidth(true)
                     layoutcontainer:SetHeight(30)
                     local moveUpButton = AceGUI:Create("Icon")
                     local moveDownButton = AceGUI:Create("Icon")
@@ -1579,14 +1604,6 @@ function GSE.CreateEditor()
                     end
                     return layoutcontainer
                 end
-                local maxWidth = container.frame:GetWidth() - 10
-                container:SetCallback(
-                    "OnClick",
-                    function(widget, _, selected, button)
-                        --   if button == "RightButton" then
-                        --   end
-                    end
-                )
 
                 -- Workaround for vanishing label ace3 bug
                 local label = AceGUI:Create("Label")
@@ -1604,14 +1621,18 @@ function GSE.CreateEditor()
                 -- end
 
                 if action.Type == Statics.Actions.Pause then
-                    local linegroup1 = AceGUI:Create("KeyGroup")
+                    local block = AceGUI:Create("InlineGroup")
+
+                    block:SetLayout("List")
+                    block:SetFullWidth(true)
+                    local linegroup1 = AceGUI:Create("SimpleGroup")
 
                     linegroup1:SetLayout("Flow")
                     linegroup1:SetFullWidth(true)
 
                     local clicksdropdown = AceGUI:Create("Dropdown")
                     clicksdropdown:SetLabel(L["Measure"])
-                    clicksdropdown:SetWidth((editframe.Width) * 0.24)
+                    clicksdropdown:SetRelativeWidth(0.24)
                     local clickdroplist = {
                         [L["Clicks"]] = L["How many macro Clicks to pause for?"],
                         [L["Milliseconds"]] = L["How many milliseconds to pause for?"],
@@ -1626,7 +1647,7 @@ function GSE.CreateEditor()
                         "OnEnter",
                         function()
                             GSE.CreateToolTip(
-                                L["Step Function"],
+                                L["Pause"],
                                 L[
                                     "A pause can be measured in either clicks or seconds.  It will either wait 5 clicks or 1.5 seconds.\nIf using seconds, you can also wait for the GCD by entering ~~GCD~~ into the box."
                                 ],
@@ -1725,8 +1746,9 @@ function GSE.CreateEditor()
                     end
                     linegroup1:AddChild(msvalueeditbox)
 
-                    container:AddChild(GetBlockToolbar(version, keyPath, maxWidth, includeAdd, hlabel, linegroup1))
-                    container:AddChild(linegroup1)
+                    block:AddChild(GetBlockToolbar(version, keyPath, includeAdd, hlabel, linegroup1))
+                    block:AddChild(linegroup1)
+                    container:AddChild(block)
                 elseif action.Type == Statics.Actions.Action or action.Type == Statics.Actions.Repeat then
                     local macroPanel = AceGUI:Create("InlineGroup")
                     if GSE.isEmpty(action.type) then
@@ -1737,7 +1759,7 @@ function GSE.CreateEditor()
                     macroPanel:SetFullWidth(true)
                     macroPanel:SetAutoAdjustHeight(true)
 
-                    local linegroup1 = GetBlockToolbar(version, keyPath, maxWidth, includeAdd, hlabel, macroPanel)
+                    local linegroup1 = GetBlockToolbar(version, keyPath, includeAdd, hlabel, macroPanel)
 
                     macroPanel:AddChild(linegroup1)
 
@@ -1783,7 +1805,7 @@ function GSE.CreateEditor()
                     typegroup:SetFullWidth(true)
                     typegroup:SetLayout("Flow")
                     local actionicon =
-                        GSE.CreateIconControl(action, version, keyPath, editframe.Sequence, editframe.frame)
+                        GSE.CreateIconControl(action, version, keyPath, editframe.Sequence, macroPanel.frame)
                     typegroup:AddChild(actionicon)
                     local spellradio = AceGUI:Create("CheckBox")
                     spellradio:SetType("radio")
@@ -1816,7 +1838,7 @@ function GSE.CreateEditor()
                     typegroup:AddChild(petradio)
                     typegroup:AddChild(toyradio)
 
-                    local spellcontainer = AceGUI:Create("InlineGroup")
+                    local spellcontainer = AceGUI:Create("SimpleGroup")
                     spellcontainer:SetLayout("List")
                     spellcontainer:SetFullWidth(true)
 
@@ -1916,7 +1938,7 @@ function GSE.CreateEditor()
                     if action.type == "macro" then
                         local macrolayout = AceGUI:Create("SimpleGroup")
                         macrolayout:SetLayout("Flow")
-
+                        macrolayout:SetFullWidth(true)
                         local compiledmacrotext =
                             GSE.UnEscapeString(GSE.CompileMacroText(action.macro, Statics.TranslatorMode.String))
                         local lenMacro = string.len(compiledmacrotext)
@@ -1934,18 +1956,13 @@ function GSE.CreateEditor()
 
                         compiledMacro:SetText(compiledmacrotext)
                         compiledMacro.label:SetNonSpaceWrap(true)
+                        compiledMacro:SetRelativeWidth(0.45)
 
-                        local feedback = AceGUI:Create("SimpleGroup")
-                        feedback:SetFullWidth(true)
-                        feedback:SetRelativeWidth(0.45)
-                        feedback:AddChild(compiledMacro)
-
-                        local spacerm = AceGUI:Create("Icon")
+                        local spacerm = AceGUI:Create("Label")
                         spacerm:SetRelativeWidth(0.03)
                         macrolayout:AddChild(macroeditbox)
                         macrolayout:AddChild(spacerm)
-                        macrolayout:AddChild(feedback)
-                        macrolayout:SetFullWidth(true)
+                        macrolayout:AddChild(compiledMacro)
 
                         spellcontainer:AddChild(macrolayout)
                     else
@@ -1996,16 +2013,16 @@ function GSE.CreateEditor()
                     macroPanel:AddChild(typerow)
                     container:AddChild(macroPanel)
                 elseif action.Type == Statics.Actions.Loop then
-                    local macroPanel = AceGUI:Create("KeyGroup")
+                    local macroPanel = AceGUI:Create("SimpleGroup")
 
-                    macroPanel:SetWidth(maxWidth)
+                    macroPanel:SetFullWidth(true)
                     macroPanel:SetLayout("List")
                     macroPanel:SetAutoAdjustHeight(true)
-                    local linegroup1 = GetBlockToolbar(version, keyPath, maxWidth, includeAdd, hlabel, macroPanel)
+                    local linegroup1 = GetBlockToolbar(version, keyPath, includeAdd, hlabel, macroPanel)
 
                     local stepdropdown = AceGUI:Create("Dropdown")
                     stepdropdown:SetLabel(L["Step Function"])
-                    stepdropdown:SetWidth((editframe.Width) * 0.24)
+                    stepdropdown:SetWidth(200)
                     stepdropdown:SetList(
                         {
                             [Statics.Sequential] = L["Sequential (1 2 3 4)"],
@@ -2083,21 +2100,8 @@ function GSE.CreateEditor()
                     linegroup1:AddChild(looplimit)
                     container:AddChild(linegroup1)
 
-                    local linegroup2 = AceGUI:Create("KeyGroup")
-                    linegroup2:SetLayout("Flow")
-                    linegroup2:SetWidth(maxWidth)
-
-                    -- local testRowButton = AceGUI:Create("Icon")
-                    -- testRowButton:SetImageSize(20, 20)
-                    -- testRowButton:SetWidth(20)
-                    -- --testRowButton:SetHeight(20)
-                    -- testRowButton:SetImage("Interface\\Icons\\spell_nature_cyclone")
-
-                    local spacerlabel3 = AceGUI:Create("Label")
-                    spacerlabel3:SetWidth(45)
-
-                    local macroGroup = AceGUI:Create("KeyGroup")
-                    macroGroup:SetWidth(maxWidth - 45)
+                    local macroGroup = AceGUI:Create("SimpleGroup")
+                    macroGroup:SetFullWidth(true)
                     macroGroup:SetLayout("List")
                     for key, act in ipairs(action) do
                         local newKeyPath = {}
@@ -2107,48 +2111,25 @@ function GSE.CreateEditor()
                         table.insert(newKeyPath, key)
                         drawAction(macroGroup, act, version, newKeyPath)
                     end
-                    -- testRowButton:SetHeight(macroGroup.frame:GetHeight())
-                    -- linegroup2:AddChild(testRowButton)
-                    linegroup2:AddChild(spacerlabel3)
-                    linegroup2:AddChild(macroGroup)
-                    macroPanel:AddChild(linegroup2)
 
-                    macroPanel.frame:SetBackdrop(
-                        {
-                            edgeFile = [[Interface/Buttons/WHITE8X8]],
-                            edgeSize = 1
-                        }
-                    )
-                    macroPanel.frame:SetBackdropBorderColor(1.0, 0.96, 0.41, 0.15)
-                    macroPanel:SetCallback(
-                        "OnRelease",
-                        function(self, obj, value)
-                            macroPanel.frame:SetBackdrop(nil)
-                        end
-                    )
+                    macroPanel:AddChild(macroGroup)
+
                     container:AddChild(macroPanel)
                 elseif action.Type == Statics.Actions.If then
-                    local macroPanel = AceGUI:Create("KeyGroup")
-                    macroPanel:SetWidth(maxWidth)
+                    local macroPanel = AceGUI:Create("InlineGroup")
+                    macroPanel:SetFullWidth(true)
                     macroPanel:SetLayout("List")
-                    macroPanel.frame:SetBackdrop(
-                        {
-                            edgeFile = [[Interface/Buttons/WHITE8X8]],
-                            edgeSize = 1
-                        }
-                    )
-                    macroPanel.frame:SetBackdropBorderColor(1.0, 0.96, 0.41, 0.15)
                     macroPanel:SetCallback(
                         "OnRelease",
                         function(self, obj, value)
                             macroPanel.frame:SetBackdrop(nil)
                         end
                     )
-                    local linegroup1 = GetBlockToolbar(version, keyPath, maxWidth, false, hlabel, macroPanel)
+                    local linegroup1 = GetBlockToolbar(version, keyPath, false, hlabel, macroPanel)
 
                     local booleanEditBox = AceGUI:Create("EditBox")
                     booleanEditBox:SetLabel(L["Variable"])
-                    booleanEditBox:SetWidth(editframe.Width * 0.24)
+                    booleanEditBox:SetWidth(250)
                     booleanEditBox:DisableButton(true)
                     booleanEditBox:SetCallback(
                         "OnEnter",
@@ -2227,8 +2208,8 @@ function GSE.CreateEditor()
 
                     local trueKeyPath = GSE.CloneSequence(keyPath)
                     table.insert(trueKeyPath, 1)
-                    local trueGroup = AceGUI:Create("KeyGroup")
-                    trueGroup:SetWidth(maxWidth - 45)
+                    local trueGroup = AceGUI:Create("InlineGroup")
+                    trueGroup:SetFullWidth(true)
                     trueGroup:SetLayout("List")
 
                     local tlabel = AceGUI:Create("Label")
@@ -2237,22 +2218,11 @@ function GSE.CreateEditor()
                     tlabel:SetFontObject(GameFontNormalLarge)
                     tlabel:SetColor(GSE.GUIGetColour(GSEOptions.KEYWORD))
 
-                    local trueContainer = AceGUI:Create("KeyGroup")
+                    local trueContainer = AceGUI:Create("SimpleGroup")
                     trueContainer:SetLayout("Flow")
-                    trueContainer:SetWidth(maxWidth)
+                    trueContainer:SetFullWidth(true)
 
-                    local toolbar =
-                        GetBlockToolbar(
-                        version,
-                        trueKeyPath,
-                        maxWidth - 45,
-                        true,
-                        tlabel,
-                        trueContainer,
-                        true,
-                        true,
-                        true
-                    )
+                    local toolbar = GetBlockToolbar(version, trueKeyPath, true, tlabel, trueContainer, true, true, true)
                     trueGroup:AddChild(toolbar)
 
                     for key, act in ipairs(action[1]) do
@@ -2263,30 +2233,14 @@ function GSE.CreateEditor()
 
                     macroPanel:AddChild(linegroup1)
 
-                    local trueindentlabel = AceGUI:Create("Label")
-                    trueindentlabel:SetWidth(45)
-                    trueContainer:AddChild(trueindentlabel)
-
                     trueContainer:AddChild(trueGroup)
                     macroPanel:AddChild(trueContainer)
-                    trueGroup.frame:SetBackdrop(
-                        {
-                            edgeFile = [[Interface/Buttons/WHITE8X8]],
-                            edgeSize = 1
-                        }
-                    )
-                    trueGroup.frame:SetBackdropBorderColor(1.0, 0.96, 0.41, 0.15)
-                    trueGroup:SetCallback(
-                        "OnRelease",
-                        function(self, obj, value)
-                            trueGroup.frame:SetBackdrop(nil)
-                        end
-                    )
+
                     -- macroPanel:AddChild(falseGroup)
                     local falseKeyPath = GSE.CloneSequence(keyPath)
                     table.insert(falseKeyPath, 2)
-                    local falsegroup = AceGUI:Create("KeyGroup")
-                    falsegroup:SetWidth(maxWidth - 45)
+                    local falsegroup = AceGUI:Create("InlineGroup")
+                    falsegroup:SetFullWidth(true)
                     falsegroup:SetLayout("List")
 
                     local flabel = AceGUI:Create("Label")
@@ -2294,45 +2248,20 @@ function GSE.CreateEditor()
                     --tlabel:SetFont(fontName, fontHeight + 4 , fontFlags)
                     flabel:SetFontObject(GameFontNormalLarge)
                     flabel:SetColor(GSE.GUIGetColour(GSEOptions.KEYWORD))
-                    local falsecontainer = AceGUI:Create("KeyGroup")
-                    falsecontainer:SetWidth(maxWidth)
+                    local falsecontainer = AceGUI:Create("SimpleGroup")
+                    falsecontainer:SetFullWidth(true)
                     falsecontainer:SetLayout("Flow")
 
                     local toolbar2 =
-                        GetBlockToolbar(
-                        version,
-                        falseKeyPath,
-                        maxWidth - 45,
-                        true,
-                        flabel,
-                        falsecontainer,
-                        true,
-                        true,
-                        true
-                    )
+                        GetBlockToolbar(version, falseKeyPath, true, flabel, falsecontainer, true, true, true)
                     falsegroup:AddChild(toolbar2)
-                    falsegroup.frame:SetBackdrop(
-                        {
-                            edgeFile = [[Interface/Buttons/WHITE8X8]],
-                            edgeSize = 1
-                        }
-                    )
-                    falsegroup.frame:SetBackdropBorderColor(1.0, 0.96, 0.41, 0.15)
-                    falsegroup:SetCallback(
-                        "OnRelease",
-                        function(self, obj, value)
-                            falsegroup.frame:SetBackdrop(nil)
-                        end
-                    )
+
                     for key, act in ipairs(action[2]) do
                         local newKeyPath = GSE.CloneSequence(falseKeyPath)
                         table.insert(newKeyPath, key)
                         drawAction(falsegroup, act, version, newKeyPath)
                     end
 
-                    local falseindentlabel = AceGUI:Create("Label")
-                    falseindentlabel:SetWidth(45)
-                    falsecontainer:AddChild(falseindentlabel)
                     falsecontainer:AddChild(falsegroup)
                     macroPanel:AddChild(falsecontainer)
                     container:AddChild(macroPanel)
@@ -2340,7 +2269,6 @@ function GSE.CreateEditor()
             end
 
             local function DrawSequenceEditor(container, version)
-                local maxWidth = container.frame:GetWidth() - 50
                 if GSE.isEmpty(editframe.Sequence.Macros[version].Actions) then
                     editframe.Sequence.Macros[version].Actions = {
                         [1] = {
@@ -2357,8 +2285,8 @@ function GSE.CreateEditor()
                 font:SetJustifyV("BOTTOM")
 
                 for key, action in ipairs(macro) do
-                    local macroPanel = AceGUI:Create("KeyGroup")
-                    macroPanel:SetWidth(maxWidth)
+                    local macroPanel = AceGUI:Create("SimpleGroup")
+                    macroPanel:SetFullWidth(true)
                     macroPanel:SetLayout("List")
                     local keyPath = {
                         [1] = key
@@ -2400,7 +2328,7 @@ function GSE.CreateEditor()
                 editframe.booleanFunctions = {}
                 editframe.numericFunctions = {}
 
-                local layoutcontainer = AceGUI:Create("KeyGroup")
+                local layoutcontainer = AceGUI:Create("SimpleGroup")
 
                 layoutcontainer:SetFullWidth(true)
                 layoutcontainer:SetHeight(editframe.Height - 230)
@@ -2409,7 +2337,7 @@ function GSE.CreateEditor()
                 local scrollcontainer = AceGUI:Create("KeyGroup") -- "InlineGroup" is also good
                 -- scrollcontainer:SetFullWidth(true)
                 -- scrollcontainer:SetFullHeight(true) -- Probably?
-                scrollcontainer:SetWidth(editframe.Width - 250)
+                scrollcontainer:SetFullWidth(true)
                 scrollcontainer:SetHeight(editframe.Height - 255)
                 scrollcontainer:SetLayout("Fill") -- Important!
                 editframe.scrollStatus = {}
@@ -2417,13 +2345,17 @@ function GSE.CreateEditor()
                 local contentcontainer = AceGUI:Create("ScrollFrame")
                 contentcontainer:SetAutoAdjustHeight(true)
                 contentcontainer:SetStatusTable(editframe.scrollStatus)
+
+                contentcontainer:SetFullWidth(true)
+
                 editframe.scrollContainer = contentcontainer
 
                 scrollcontainer:AddChild(contentcontainer)
 
-                local linegroup1 = AceGUI:Create("KeyGroup")
+                local linegroup1 = AceGUI:Create("SimpleGroup")
                 linegroup1:SetLayout("Flow")
-                linegroup1:SetWidth(editframe.Width - 250)
+
+                linegroup1:SetFullWidth(true)
 
                 local spacerlabel1 = AceGUI:Create("Label")
                 spacerlabel1:SetWidth(5)
@@ -2664,10 +2596,6 @@ function GSE.CreateEditor()
                     end
                 )
 
-                local linegroup2 = AceGUI:Create("KeyGroup")
-                linegroup2:SetLayout("Flow")
-                linegroup2:SetWidth(editframe.Width - 250)
-
                 local spacerlabel2 = AceGUI:Create("Label")
                 spacerlabel2:SetWidth(6)
 
@@ -2833,13 +2761,23 @@ function GSE.CreateEditor()
                     end
                 )
 
-                if GSE.TableLength(GSE.BooleanVariables) < 1 then
-                    addIfButton:SetDisabled(true)
-                end
-
                 local linegroup3 = AceGUI:Create("KeyGroup")
                 linegroup3:SetLayout("Flow")
-                linegroup3:SetWidth(editframe.Width - 250)
+                linegroup3:SetFullWidth(true)
+
+                local versionLabel = AceGUI:Create("EditBox")
+                versionLabel:SetWidth(200)
+                versionLabel:SetLabel(L["Name"])
+                versionLabel:SetText(
+                    editframe.Sequence.Macros[version].Label and editframe.Sequence.Macros[version].Label or ""
+                )
+                versionLabel:SetCallback(
+                    "OnTextChanged",
+                    function(self, event, text)
+                        editframe.Sequence.Macros[version].Label = text
+                    end
+                )
+                versionLabel:DisableButton(true)
 
                 local spacerlabel3 = AceGUI:Create("Label")
                 spacerlabel3:SetWidth(6)
@@ -2848,7 +2786,7 @@ function GSE.CreateEditor()
                 linegroup1:AddChild(addLoopButton)
                 linegroup1:AddChild(addPauseButton)
                 linegroup1:AddChild(addIfButton)
-
+                linegroup1:AddChild(versionLabel)
                 linegroup1:AddChild(spacerlabel1)
                 linegroup1:AddChild(basespellspacer)
                 linegroup1:AddChild(previewMacro)
@@ -2863,7 +2801,7 @@ function GSE.CreateEditor()
 
                 local macrocontainer = AceGUI:Create("InlineGroup")
                 macrocontainer:SetTitle(L["Sequence"])
-                macrocontainer:SetWidth(contentcontainer.frame:GetWidth() - 50)
+                macrocontainer:SetFullWidth(true)
                 DrawSequenceEditor(macrocontainer, version)
                 if not editframe.Sequence.MetaData.DisableEditor then
                     contentcontainer:AddChild(macrocontainer)
@@ -2872,12 +2810,12 @@ function GSE.CreateEditor()
                 layoutcontainer:AddChild(scrollcontainer)
 
                 local toolbarcontainer = AceGUI:Create("KeyGroup") -- "InlineGroup" is also good
-                toolbarcontainer:SetWidth(contentcontainer.frame:GetWidth() - 50)
+                toolbarcontainer:SetFullWidth(true)
                 toolbarcontainer:SetLayout("list")
 
                 local toolbarrow1 = AceGUI:Create("KeyGroup")
                 toolbarrow1:SetLayout("Flow")
-                toolbarrow1:SetWidth(contentcontainer.frame:GetWidth() - 50)
+                toolbarrow1:SetFullWidth(true)
 
                 if GSE.isEmpty(editframe.Sequence.Macros[version].InbuiltVariables) then
                     editframe.Sequence.Macros[version].InbuiltVariables = {}
@@ -2964,37 +2902,102 @@ function GSE.CreateEditor()
             end
             GSEOptions.editorHeight = editframe.Height
             GSEOptions.editorWidth = editframe.Width
-            basecontainer:SetHeight(editframe.Height - 100)
-            leftScrollContainer:SetHeight(editframe.Height - 100)
-            rightContainer:SetWidth(editframe.Width - 250)
-            rightContainer:SetHeight(editframe.Height - 90)
-            GUISelectEditorTab(editframe.ContentContainer, "Resize", editframe.SelectedTab)
 
-            editframe:DoLayout()
+            GUISelectEditorTab(editframe.ContentContainer, "Resize", editframe.SelectedTab)
         end
     )
 
-    local function CreateSequencePanels(container, key)
-        local elements = GSE.split(key, ",")
-        local classid = tonumber(elements[1])
-        local sequencename = elements[3]
+    function editframe.listSequences()
+        local tree = {
+            {
+                value = "NewSequence",
+                text = L["New"],
+                icon = Statics.ActionsIcons.Repeat
+            },
+            {
+                value = "Import",
+                text = L["Import"],
+                icon = Statics.ActionsIcons.Down
+            }
+        }
 
-        local font = CreateFont("seqPanelFont")
-        font:SetFontObject(GameFontNormal)
+        local classtree = {}
 
-        local selpanel = AceGUI:Create("SelectablePanel")
+        local names = GSE.GetSequenceNames()
 
-        selpanel:SetKey(key)
-        selpanel:SetWidth(200)
-        selpanel:SetHeight(30)
-        selpanel:SetAutoAdjustHeight(false)
-        selpanel:SetLayout("Flow")
-        editframe.panels[key] = selpanel
+        for k, _ in GSE.pairsByKeys(names, GSE.AlphabeticalTableSortAlgorithm) do
+            local elements = GSE.split(k, ",")
+            local tclassid = tonumber(elements[1])
+            local specid = tonumber(elements[2])
+            if tclassid and GSE.isEmpty(classtree[tclassid]) then
+                classtree[tclassid] = {}
+            end
+            if specid and GSE.isEmpty(classtree[tclassid][specid]) then
+                classtree[tclassid][specid] = {}
+            end
+            table.insert(
+                classtree[tclassid][specid],
+                {
+                    value = k,
+                    text = elements[3]
+                }
+            )
+        end
 
-        selpanel:SetCallback(
-            "OnClick",
-            function(widget, _, selected, button)
-                editframe:clearpanels(widget, selected)
+        for k, v in pairs(classtree) do
+            local tnode = {}
+            if k > 0 then
+                tnode = {
+                    value = k,
+                    text = GetClassInfo(k),
+                    icon = GSE.GetClassIcon(k),
+                    children = {}
+                }
+            elseif k == 0 then
+                tnode = {
+                    value = "GLOBAL",
+                    text = L["Global"],
+                    children = {}
+                }
+            end
+            for i, j in pairs(v) do
+                local id, sname, _, sicon = GetSpecializationInfoForSpecID(i)
+
+                local specnode = {
+                    value = i .. "-" .. k,
+                    text = sname,
+                    icon = sicon,
+                    children = {}
+                }
+                if id then
+                    for _, h in ipairs(j) do
+                        table.insert(specnode.children, h)
+                    end
+                    table.insert(tnode.children, specnode)
+                else
+                    for _, h in ipairs(j) do
+                        table.insert(tnode.children, h)
+                    end
+                end
+            end
+
+            table.insert(tree, tnode)
+        end
+        treeContainer:SetTree(tree)
+        treeContainer:SetCallback(
+            "OnGroupSelected",
+            function(container, event, group, ...)
+                local unique = {("\001"):split(group)}
+                local key = unique[#unique]
+                local elements, classid, sequencename
+                if key then
+                    elements = GSE.split(key, ",")
+                    if #elements >= 3 then
+                        classid = elements[1]
+                        sequencename = elements[3]
+                    end
+                end
+                local button = GetMouseButtonClicked()
                 if button == "RightButton" then
                     MenuUtil.CreateContextMenu(
                         editframe.frame,
@@ -3003,184 +3006,90 @@ function GSE.CreateEditor()
                             rootDescription:CreateButton(
                                 L["New"],
                                 function()
-                                    GSE.GUILoadEditor(editframe)
+                                    if editframe.loaded then
+                                        container:ReleaseChildren()
+                                        editframe.loaded = nil
+                                    end
+                                    local rightContainer = GSE.GUILoadEditor(editframe)
+                                    container:AddChild(rightContainer)
                                 end
                             )
-                            rootDescription:CreateButton(
-                                L["Export"],
-                                function()
-                                    GSE.GUIExport(classid, sequencename, "SEQUENCE")
-                                end
-                            )
-                            rootDescription:CreateButton(
-                                L["Send"],
-                                function()
-                                    GSE.GUIShowTransmissionGui(sequencename, editframe)
-                                end
-                            )
-                            if GSE.Patron then
+                            if not GSE.isEmpty(sequencename) then
                                 rootDescription:CreateButton(
-                                    string.format(L["Open %s in New Window"], sequencename),
+                                    L["Export"],
                                     function()
-                                        local editor = GSE.CreateEditor()
-                                        editor.listSequences()
-                                        GSE.GUILoadEditor(editor, widget:GetKey())
+                                        GSE.GUIExport(classid, sequencename, "SEQUENCE")
+                                    end
+                                )
+                                rootDescription:CreateButton(
+                                    L["Send"],
+                                    function()
+                                        GSE.GUIShowTransmissionGui(sequencename, editframe)
+                                    end
+                                )
+                                if GSE.Patron then
+                                    rootDescription:CreateButton(
+                                        string.format(L["Open %s in New Window"], sequencename),
+                                        function()
+                                            local editor = GSE.CreateEditor()
+                                            editor.listSequences()
+                                            editor.treeContainer:SelectByValue(group)
+                                        end
+                                    )
+                                end
+                                rootDescription:CreateButton(
+                                    L["Chat Link"],
+                                    function()
+                                        StaticPopupDialogs["GSE_ChatLink"].link =
+                                            GSE.SequenceChatPattern(sequencename, classid)
+                                        StaticPopup_Show("GSE_ChatLink")
                                     end
                                 )
                             end
-                            rootDescription:CreateButton(
-                                L["Chat Link"],
-                                function()
-                                    StaticPopupDialogs["GSE_ChatLink"].link =
-                                        GSE.SequenceChatPattern(sequencename, classid)
-                                    StaticPopup_Show("GSE_ChatLink")
-                                end
-                            )
-
                             rootDescription:CreateButton(
                                 L["Keybindings"],
                                 function()
                                     GSE.ShowKeyBindings()
                                 end
                             )
-                            rootDescription:CreateButton(
-                                L["Delete"],
-                                function()
-                                    GSE.GUIDeleteSequence(classid, sequencename)
-                                end
-                            )
+                            if not GSE.isEmpty(sequencename) then
+                                rootDescription:CreateButton(
+                                    L["Delete"],
+                                    function()
+                                        GUIDeleteSequence(classid, sequencename)
+                                    end
+                                )
+                            end
                         end
                     )
                 elseif button == "LeftButton" and IsShiftKeyDown() then
                     StaticPopupDialogs["GSE_ChatLink"].link = GSE.SequenceChatPattern(sequencename, classid)
                     StaticPopup_Show("GSE_ChatLink")
                 else
-                    GSE.GUILoadEditor(editframe, widget:GetKey())
+                    if group == "NewSequence" then
+                        if editframe.loaded then
+                            container:ReleaseChildren()
+                            editframe.loaded = nil
+                        end
+                        local rightContainer = GSE.GUILoadEditor(editframe)
+                        container:AddChild(rightContainer)
+                    elseif group == "Import" then
+                        GSE.ShowImport()
+                    elseif not GSE.isEmpty(sequencename) then
+                        if editframe.loaded then
+                            container:ReleaseChildren()
+                            editframe.loaded = nil
+                        end
+                        local rightContainer = GSE.GUILoadEditor(editframe, key)
+                        container:AddChild(rightContainer)
+                        rightContainer:DoLayout()
+                    end
                 end
             end
         )
-
-        -- Workaround for vanishing label ace3 bug
-        local label = AceGUI:Create("Label")
-        label:SetFontObject(font)
-        selpanel:AddChild(label)
-
-        local headerlabel = sequencename
-        local hlabel = AceGUI:Create("Label")
-
-        hlabel:SetText(headerlabel)
-        hlabel:SetWidth(200)
-        hlabel:SetFontObject(font)
-
-        selpanel:AddChild(hlabel)
-
-        container:AddChild(selpanel)
     end
 
-    function editframe.listSequences()
-        leftscroll:ReleaseChildren()
-        local toolbarRow = AceGUI:Create("SimpleGroup")
-        toolbarRow:SetLayout("Flow")
-
-        local newButton = AceGUI:Create("Button")
-        newButton:SetText(L["New"])
-        newButton:SetWidth(90)
-        newButton:SetCallback(
-            "OnClick",
-            function()
-                GSE.GUILoadEditor(editframe)
-            end
-        )
-
-        newButton:SetCallback(
-            "OnLeave",
-            function()
-                GSE.ClearTooltip(editframe)
-            end
-        )
-        toolbarRow:AddChild(newButton)
-
-        local importButton = AceGUI:Create("Button")
-        importButton:SetText(L["Import"])
-        importButton:SetWidth(90)
-        importButton:SetCallback(
-            "OnClick",
-            function()
-                GSE.ShowImport()
-            end
-        )
-
-        importButton:SetCallback(
-            "OnLeave",
-            function()
-                GSE.ClearTooltip(editframe)
-            end
-        )
-        toolbarRow:AddChild(importButton)
-        leftscroll:AddChild(toolbarRow)
-        local names = GSE.GetSequenceNames()
-        local cclassid = tonumber(-1)
-        local cspecid = tonumber(-1)
-        for k, _ in GSE.pairsByKeys(names, GSE.AlphabeticalTableSortAlgorithm) do
-            local elements = GSE.split(k, ",")
-            local tclassid = tonumber(elements[1])
-            local specid = tonumber(elements[2])
-            local fontName, fontHeight, fontFlags = GameFontNormal:GetFont()
-            if tclassid ~= cclassid then
-                cclassid = tclassid
-                local sectionspacer1 = AceGUI:Create("Label")
-                sectionspacer1:SetText(" ")
-                sectionspacer1:SetFont(fontName, 4, fontFlags)
-                leftscroll:AddChild(sectionspacer1)
-                local sectionheader = AceGUI:Create("Label")
-                sectionheader:SetText(Statics.SpecIDList[cclassid])
-                sectionheader:SetFont(fontName, fontHeight + 4, fontFlags)
-                sectionheader:SetColor(GSE.GUIGetColour(GSEOptions.COMMENT))
-                leftscroll:AddChild(sectionheader)
-                local sectionspacer2 = AceGUI:Create("Label")
-                sectionspacer2:SetText(" ")
-                sectionspacer2:SetFont(fontName, 2, fontFlags)
-                leftscroll:AddChild(sectionspacer2)
-            end
-            if GetSpecializationInfoByID then
-                if cspecid ~= specid then
-                    cspecid = specid
-                    local specialisationname = select(2, GetSpecializationInfoByID(specid))
-                    local sectionspacer3 = AceGUI:Create("Label")
-                    sectionspacer3:SetText(" ")
-                    sectionspacer3:SetFont(fontName, 4, fontFlags)
-                    leftscroll:AddChild(sectionspacer3)
-                    local sectionheader2 = AceGUI:Create("Label")
-                    sectionheader2:SetText(specialisationname)
-                    sectionheader2:SetFont(fontName, fontHeight, fontFlags)
-                    sectionheader2:SetColor(GSE.GUIGetColour(GSEOptions.STANDARDFUNCS))
-                    leftscroll:AddChild(sectionheader2)
-                    local sectionspacer4 = AceGUI:Create("Label")
-                    sectionspacer4:SetText(" ")
-                    sectionspacer4:SetFont(fontName, 2, fontFlags)
-                    leftscroll:AddChild(sectionspacer4)
-                end
-            end
-            CreateSequencePanels(leftscroll, k)
-        end
-    end
-
-    function editframe:clearpanels(widget, selected)
-        for k, _ in pairs(editframe.panels) do
-            if k == widget:GetKey() then
-                if selected then
-                    GSE.GUILoadEditor(editframe, widget:GetKey())
-                    editframe.panels[k]:SetClicked(true)
-                else
-                    editframe.panels[k]:SetClicked(false)
-                end
-            else
-                editframe.panels[k]:SetClicked(false)
-            end
-        end
-    end
-
-    function GSE.GUICreateEditorTabs()
+    function editframe.GUICreateEditorTabs()
         local tabl = {
             {
                 text = L["Configuration"],
@@ -3188,9 +3097,9 @@ function GSE.CreateEditor()
             }
         }
         -- If disabled editor then dont show the internal tabs
-        for k, _ in ipairs(editframe.Sequence.Macros) do
+        for k, v in ipairs(editframe.Sequence.Macros) do
             local insline = {}
-            insline.text = tostring(k)
+            insline.text = v.Label and tostring(k) .. " - " .. v.Label or tostring(k)
             insline.value = tostring(k)
             table.insert(tabl, insline)
         end
@@ -3212,9 +3121,11 @@ function GSE.CreateEditor()
         return tabl
     end
 
-    function editframe.GUIEditorPerformLayout()
-        rightContainer:ReleaseChildren()
-
+    function editframe.GUIEditorPerformLayout(rightContainer)
+        if not rightContainer then
+            rightContainer = editframe.rightContainer
+            rightContainer:ReleaseChildren()
+        end
         local headerGroup = AceGUI:Create("KeyGroup")
         headerGroup:SetFullWidth(true)
         headerGroup:SetLayout("Flow")
@@ -3264,7 +3175,7 @@ function GSE.CreateEditor()
 
         local tabgrp = AceGUI:Create("TabGroup")
         tabgrp:SetLayout("Flow")
-        tabgrp:SetTabs(GSE.GUICreateEditorTabs())
+        tabgrp:SetTabs(editframe.GUICreateEditorTabs())
         editframe.ContentContainer = tabgrp
 
         tabgrp:SetCallback(
@@ -3379,8 +3290,10 @@ function GSE.CreateEditor()
         delbutton:SetCallback(
             "OnClick",
             function()
-                editframe:Hide()
-                GSE.GUIDeleteSequence(editframe.ClassID, editframe.SequenceName)
+                local seqname = editframe.SequenceName
+                local classid = editframe.ClassID
+                GUIDeleteSequence(classid, seqname)
+                editframe.listSequences()
             end
         )
         delbutton:SetCallback(
@@ -3403,10 +3316,10 @@ function GSE.CreateEditor()
         editframe:SetStatusText(editframe.statusText)
     end
 
-    function GSE.GetVersionList()
+    function editframe.GetVersionList()
         local tabl = {}
-        for k, _ in ipairs(editframe.Sequence.Macros) do
-            tabl[tostring(k)] = tostring(k)
+        for k, v in ipairs(editframe.Sequence.Macros) do
+            tabl[tostring(k)] = v.Label and tostring(k) .. " - " .. v.Label or tostring(k)
         end
         return tabl
     end
@@ -3549,46 +3462,6 @@ function GSE.CreateEditor()
         end
     end
 
-    if GSE.isEmpty(GSE.CreateIconControl) then
-        GSE.CreateIconControl = function(action, version, keyPath, sequence, frame)
-            local lbl = AceGUI:Create("Label")
-            lbl:SetFontObject(GameFontNormalLarge)
-            lbl:SetWidth(15)
-            lbl:SetHeight(15)
-
-            if action.Icon then
-                lbl:SetText("|T" .. action.Icon .. ":0|t")
-                return lbl
-            end
-            local spellinfo = {}
-            spellinfo.iconID = Statics.QuestionMarkIconID
-
-            if action.type == "macro" then
-                local macro = GSE.UnEscapeString(action.macro)
-                if string.sub(macro, 1, 1) == "/" then
-                    local spellstuff = GSE.GetSpellsFromString(macro)
-                    if spellstuff and #spellstuff > 1 then
-                        spellstuff = spellstuff[1]
-                    end
-                    if spellstuff then
-                        spellinfo = spellstuff
-                    end
-                else
-                    spellinfo.name = action.macro
-                    local macindex = GetMacroIndexByName(spellinfo.name)
-                    local _, iconid, _ = GetMacroInfo(macindex)
-                    spellinfo.iconID = iconid
-                end
-            elseif action.type == "Spell" then
-                spellinfo = C_Spell.GetSpellInfo(action.spell)
-            end
-            if spellinfo.iconID then
-                lbl:SetText("|T" .. spellinfo.iconID .. ":0|t")
-            end
-            return lbl
-        end
-    end
-
     function editframe:remoteSequenceUpdated(seqName)
         if seqName == editframe.SequenceName then
             if editframe.save then
@@ -3607,13 +3480,21 @@ function GSE.CreateEditor()
             end
         end
         editframe.listSequences()
+        -- if editframe.OrigSequenceName ~= seqName then
+        --     if editframe.Sequence.MetaData.SpecID and editframe.ClassID then
+        --         print(editframe.ClassID .. "," .. editframe.Sequence.MetaData.SpecID .. "," .. seqName)
+        --         editframe.treeContainer:SelectByValue(
+        --             editframe.ClassID .. "," .. editframe.Sequence.MetaData.SpecID .. "," .. seqName
+        --         )
+        --     end
+        -- end
     end
 
     return editframe
 end
 
 function GSE.ShowSequences()
-    if not InCombatLockdown() then
+    if not InCombatLockdown() or (GSE.PlayerSpellsLoaded and GSE.PlayerSpellsLoaded()) then
         local editframe = GSE.CreateEditor()
         editframe.listSequences()
         editframe:Show()
@@ -3645,3 +3526,80 @@ end
 
 GSE:RegisterMessage(Statics.SEQUENCE_UPDATED, remoteSeqences)
 GSE:RegisterMessage(Statics.COLLECTION_IMPORTED, collectionImported)
+
+function GSE.GUILoadEditor(editor, key, recordedstring)
+    local classid
+    local sequenceName
+    local sequence
+    if GSE.isEmpty(key) then
+        classid = GSE.GetCurrentClassID()
+        sequenceName = "NEW_SEQUENCE"
+        sequence = {
+            ["MetaData"] = {
+                ["Author"] = GSE.GetCharacterName(),
+                ["Talents"] = GSE.GetCurrentTalents(),
+                ["Default"] = 1,
+                ["SpecID"] = GSE.GetCurrentSpecID(),
+                ["GSEVersion"] = GSE.VersionString,
+                ["Name"] = sequenceName
+            },
+            ["Macros"] = {
+                [1] = {
+                    ["Actions"] = {
+                        [1] = {
+                            ["macro"] = "Need Macro Here",
+                            ["Type"] = Statics.Actions.Action
+                        }
+                    }
+                }
+            }
+        }
+        if not GSE.isEmpty(recordedstring) then
+            sequence.Macros[1]["Actions"] = nil
+            local recordedMacro = {}
+            for _, v in ipairs(GSE.SplitMeIntoLines(recordedstring)) do
+                local spellid = GSE.TranslateString(v, Statics.TranslatorMode.ID)
+                if spellid then
+                    local action = {
+                        ["Type"] = Statics.Actions.Action,
+                        ["type"] = "macro",
+                        ["macro"] = spellid
+                    }
+                    table.insert(recordedMacro, action)
+                end
+            end
+            sequence.Macros[1]["Actions"] = recordedMacro
+        end
+        editor.NewSequence = true
+    else
+        local elements = GSE.split(key, ",")
+        classid = tonumber(elements[1])
+        sequenceName = elements[3]
+        --sequence = GSE.CloneSequence(GSE.Library[classid][sequenceName], true)
+        local _, seq = GSE.DecodeMessage(GSESequences[classid][sequenceName])
+        if seq then
+            sequence = seq[2]
+            editor.NewSequence = false
+        end
+    end
+    if GSE.isEmpty(sequence.WeakAuras) then
+        sequence.WeakAuras = {}
+    end
+    editor:SetStatusText("GSE: " .. GSE.VersionString)
+    editor.SequenceName = sequenceName
+    editor.OrigSequenceName = sequenceName
+    editor.Sequence = sequence
+    editor.ClassID = classid
+    local rightContainer = AceGUI:Create("SimpleGroup")
+
+    rightContainer:SetLayout("List")
+    rightContainer:SetFullWidth(true)
+    rightContainer:SetFullHeight(true)
+    editor.GUIEditorPerformLayout(rightContainer)
+    editor.ContentContainer:SelectTab("config")
+
+    editor.loaded = true
+    editor:Show()
+    editor.rightContainer = rightContainer
+    return rightContainer
+end

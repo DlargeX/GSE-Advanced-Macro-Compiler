@@ -3,38 +3,44 @@ local GSE = GSE
 local Statics = GSE.Static
 
 local AceGUI = LibStub("AceGUI-3.0")
+local AceEvent = LibStub("AceEvent-3.0")
 local L = GSE.L
 
+local playerSpells = {}
+
+function GSE.PlayerSpellsLoaded()
+    return #playerSpells > 0
+end
+
 if GSE.GameMode > 10 then
-    GSE.CreateSpellEditBox = function(action, version, keyPath, sequence, compiledMacro, frame)
-        local playerSpells = {}
+    local function loadPlayerSpells()
+        table.wipe(playerSpells)
 
-        -- local function spellFilter(self, spellID)
-        --     return playerSpells[spellID]
-        -- end
+        for tab = 2, C_SpellBook.GetNumSpellBookSkillLines() do
+            local lineinfo = C_SpellBook.GetSpellBookSkillLineInfo(tab)
+            local offset = lineinfo.itemIndexOffset
 
-        local function loadPlayerSpells()
-            table.wipe(playerSpells)
+            for i = 0, lineinfo.numSpellBookItems do
+                local spellinfo = C_SpellBook.GetSpellBookItemInfo(i + offset, 0)
 
-            for tab = 2, C_SpellBook.GetNumSpellBookSkillLines() do
-                local lineinfo = C_SpellBook.GetSpellBookSkillLineInfo(tab)
-                local offset = lineinfo.itemIndexOffset
-
-                for i = 0, lineinfo.numSpellBookItems do
-                    local spellinfo = C_SpellBook.GetSpellBookItemInfo(i + offset, 0)
-
-                    local spellName = spellinfo.name
-                    --local spellID = spellinfo.spellID
-                    local offspec = spellinfo.isOffSpec
-                    local passive = spellinfo.isPassive
-                    if not passive and not offspec and spellName then
-                        table.insert(playerSpells, spellName)
-                    end
+                local spellName = spellinfo.name
+                --local spellID = spellinfo.spellID
+                local offspec = spellinfo.isOffSpec
+                local passive = spellinfo.isPassive
+                if not passive and not offspec and spellName then
+                    table.insert(playerSpells, spellName)
                 end
             end
-            table.sort(playerSpells)
         end
+        table.sort(playerSpells)
+    end
 
+    AceEvent:RegisterEvent("SPELLS_CHANGED", loadPlayerSpells)
+    AceEvent:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED", loadPlayerSpells)
+    AceEvent:RegisterEvent("TRAIT_CONFIG_UPDATED", loadPlayerSpells)
+    AceEvent:RegisterEvent("PLAYER_TALENT_UPDATE", loadPlayerSpells)
+
+    GSE.CreateSpellEditBox = function(action, version, keyPath, sequence, compiledMacro, frame)
         if GSE.isEmpty(action.type) then
             action.type = "spell"
         end
@@ -43,9 +49,9 @@ if GSE.GameMode > 10 then
 
         spellEditBox:SetWidth(250)
         spellEditBox:DisableButton(true)
-
-        loadPlayerSpells()
-
+        if #playerSpells < 1 then
+            loadPlayerSpells()
+        end
         if GSE.isEmpty(sequence.Macros[version].Actions[keyPath].type) then
             sequence.Macros[version].Actions[keyPath].type = "spell"
         end
@@ -538,7 +544,6 @@ function GSE.CreateIconControl(action, version, keyPath, sequence, frame)
 
     if action.Icon then
         lbl:SetText("|T" .. action.Icon .. ":0|t")
-        return lbl
     else
         local spellinfo = {}
         spellinfo.iconID = Statics.QuestionMarkIconID
@@ -605,7 +610,6 @@ function GSE.CreateIconControl(action, version, keyPath, sequence, frame)
     lbl:SetCallback(
         "OnClick",
         function(widget, button)
-            -- if button == "RightButton" then
             MenuUtil.CreateContextMenu(
                 frame,
                 function(ownerRegion, rootDescription)

@@ -3,26 +3,6 @@ local L = GSE.L
 local Statics = GSE.Static
 local LibQTip = LibStub("LibQTip-1.0")
 
---- This function pops up a confirmation dialog.
-function GSE.GUIDeleteSequence(classid, sequenceName)
-  StaticPopupDialogs["GSE-DeleteMacroDialog"].text =
-    string.format(
-    L["Are you sure you want to delete %s?  This will delete the macro and all versions.  This action cannot be undone."],
-    sequenceName
-  )
-  StaticPopupDialogs["GSE-DeleteMacroDialog"].OnAccept = function(self, data)
-    GSE.GUIConfirmDeleteSequence(classid, sequenceName)
-  end
-
-  StaticPopup_Show("GSE-DeleteMacroDialog")
-end
-
---- This function then deletes the macro.
-function GSE.GUIConfirmDeleteSequence(classid, sequenceName)
-  GSE.DeleteSequence(classid, sequenceName)
-  GSE.ShowSequences()
-end
-
 --- Format the text against the GSE Sequence Spec.
 function GSE.GUIParseText(editbox)
   if GSEOptions.RealtimeParse then
@@ -31,80 +11,6 @@ function GSE.GUIParseText(editbox)
     editbox:SetText(returntext)
     editbox:SetCursorPosition(string.len(returntext) + 2)
   end
-end
-
-function GSE.GUILoadEditor(editor, key, recordedstring)
-  local classid
-  local sequenceName
-  local sequence
-  if GSE.isEmpty(key) then
-    classid = GSE.GetCurrentClassID()
-    sequenceName = "NEW_SEQUENCE"
-    sequence = {
-      ["MetaData"] = {
-        ["Author"] = GSE.GetCharacterName(),
-        ["Talents"] = GSE.GetCurrentTalents(),
-        ["Default"] = 1,
-        ["SpecID"] = GSE.GetCurrentSpecID(),
-        ["GSEVersion"] = GSE.VersionString,
-        ["Name"] = sequenceName
-      },
-      ["Macros"] = {
-        [1] = {
-          ["Actions"] = {
-            [1] = {
-              ["macro"] = "Need Macro Here",
-              ["Type"] = Statics.Actions.Action
-            }
-          }
-        }
-      }
-    }
-    if not GSE.isEmpty(recordedstring) then
-      sequence.Macros[1]["Actions"] = nil
-      local recordedMacro = {}
-      for _, v in ipairs(GSE.SplitMeIntoLines(recordedstring)) do
-        print(v)
-        local spellid = GSE.TranslateString(v, Statics.TranslatorMode.ID)
-        if spellid then
-          local action = {
-            ["Type"] = Statics.Actions.Action,
-            ["type"] = "macro",
-            ["macro"] = spellid
-          }
-          table.insert(recordedMacro, action)
-        end
-      end
-      sequence.Macros[1]["Actions"] = recordedMacro
-    end
-    editor.NewSequence = true
-  else
-    local elements = GSE.split(key, ",")
-    classid = tonumber(elements[1])
-    sequenceName = elements[3]
-    --sequence = GSE.CloneSequence(GSE.Library[classid][sequenceName], true)
-    local _, seq = GSE.DecodeMessage(GSESequences[classid][sequenceName])
-    if seq then
-      sequence = seq[2]
-      editor.NewSequence = false
-    end
-  end
-  if GSE.isEmpty(sequence.WeakAuras) then
-    sequence.WeakAuras = {}
-  end
-  editor:SetStatusText("GSE: " .. GSE.VersionString)
-  editor.SequenceName = sequenceName
-  editor.Sequence = sequence
-  editor.ClassID = classid
-  editor.GUIEditorPerformLayout()
-  editor.ContentContainer:SelectTab("config")
-  if sequence.ReadOnly then
-    editor.SaveButton:SetDisabled(true)
-    editor:SetStatusText(
-      "GSE: " .. GSE.VersionString .. " " .. L["This sequence is Read Only and unable to be edited."]
-    )
-  end
-  editor:Show()
 end
 
 function GSE:OnInitialize()
