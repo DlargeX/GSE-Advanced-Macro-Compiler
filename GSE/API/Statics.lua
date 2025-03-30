@@ -424,17 +424,37 @@ Statics.Actions.Action = "Action"
 Statics.Actions.Pause = "Pause"
 
 Statics.ActionsIcons = {}
-Statics.ActionsIcons.Loop = "Interface\\Addons\\GSE_GUI\\Assets\\loop.tga"
-Statics.ActionsIcons.If = "Interface\\Addons\\GSE_GUI\\Assets\\if.tga"
-Statics.ActionsIcons.Repeat = "Interface\\Addons\\GSE_GUI\\Assets\\repeat.tga"
-Statics.ActionsIcons.Action = "Interface\\Addons\\GSE_GUI\\Assets\\action.tga"
-Statics.ActionsIcons.Pause = "Interface\\Addons\\GSE_GUI\\Assets\\pause.tga"
-Statics.ActionsIcons.Up = "Interface\\Addons\\GSE_GUI\\Assets\\up.tga"
-Statics.ActionsIcons.Down = "Interface\\Addons\\GSE_GUI\\Assets\\down.tga"
-Statics.ActionsIcons.Delete = "Interface\\Addons\\GSE_GUI\\Assets\\delete.tga"
-Statics.ActionsIcons.Key = "Interface\\Addons\\GSE_GUI\\Assets\\2key.png"
+Statics.ActionsIcons.Loop = "Interface\\Addons\\GSE_GUI\\Assets\\loop.png"
+Statics.ActionsIcons.If = "Interface\\Addons\\GSE_GUI\\Assets\\if.png"
+Statics.ActionsIcons.Repeat = "Interface\\Addons\\GSE_GUI\\Assets\\repeat.png"
+Statics.ActionsIcons.Action = "Interface\\Addons\\GSE_GUI\\Assets\\action.png"
+Statics.ActionsIcons.Pause = "Interface\\Addons\\GSE_GUI\\Assets\\pause.png"
+Statics.ActionsIcons.Up = "Interface\\Addons\\GSE_GUI\\Assets\\up.png"
+Statics.ActionsIcons.Down = "Interface\\Addons\\GSE_GUI\\Assets\\down.png"
+Statics.ActionsIcons.Delete = "Interface\\Addons\\GSE_GUI\\Assets\\delete.png"
+Statics.ActionsIcons.Key = "Interface\\Addons\\GSE_GUI\\Assets\\key.png"
 Statics.ActionsIcons.Settings = "Interface\\Addons\\GSE_GUI\\Assets\\cog.png"
-Statics.ActionsIcons.Add = 135769
+Statics.ActionsIcons.Add = "Interface\\Addons\\GSE_GUI\\Assets\\add.png"
+
+Statics.Icons = {}
+Statics.Icons.Sequences = "Interface/Addons/GSE_GUI/Assets/sequences.png"
+Statics.Icons.Variables = "Interface/Addons/GSE_GUI/Assets/variables.png"
+
+Statics.Icons.Keybindings = "Interface/AddOns/GSE_GUI/Assets/key.png"
+Statics.Icons.Import = "Interface/AddOns/GSE_GUI/Assets/import.png"
+Statics.Icons.Macros = "Interface\\MacroFrame\\MacroFrame-Icon"
+Statics.Icons.Options = Statics.ActionsIcons.Settings
+Statics.Icons.Close = "Interface/AddOns/GSE_GUI/Assets/power.png"
+Statics.Icons.Logo = "Interface\\Addons\\GSE_GUI\\Assets\\GSE_512x512-Transparent.png"
+Statics.Icons.Discord = "Interface\\Addons\\GSE_GUI\\Assets\\discord.png"
+Statics.Icons.Github = "Interface\\Addons\\GSE_GUI\\Assets\\github.png"
+Statics.Icons.Patreon = "Interface\\Addons\\GSE_GUI\\Assets\\patreon.png"
+Statics.Icons.MenuLogo = "Interface/AddOns/GSE_GUI/Assets/GSE_Menu_Logo.png"
+Statics.Icons.Export = 4419478
+Statics.Icons.Button = "Interface/AddOns/GSE_GUI/Assets/ActionORide.png"
+Statics.Icons.Account = 133784
+Statics.Icons.Personal = 236448
+Statics.Icons.Talents = 134327
 
 Statics.GSE3OnClick =
     [=[
@@ -512,5 +532,7 @@ StaticPopupDialogs["GSE_ConfirmReloadUIDialog"] = {
 }
 
 Statics.SEQUENCE_UPDATED = "GSE_SEQUENCE_UPDATED"
+Statics.VARIABLE_UPDATED = "GSE_VARIABLE_UPDATED"
+Statics.MACRO_UPDATED = "GSE_MACRO_UPDATED"
 Statics.COLLECTION_IMPORTED = "GSE_COLLECTION_IMPORTED"
 GSE.DebugProfile("Statics")

@@ -133,18 +133,6 @@ function GSE.GetOptionsTable()
                         name = L["Millisecond click settings"],
                         order = 380
                     },
-                    externalMillisecondClickRate = {
-                        name = L["MS Click Rate"],
-                        desc = L["The milliseconds being used in key click delay."],
-                        type = "input",
-                        set = function(info, val)
-                            GSEOptions.msClickRate = tonumber(val)
-                        end,
-                        get = function(info)
-                            return GSEOptions.msClickRate and tostring(GSEOptions.msClickRate) or "250"
-                        end,
-                        order = 385
-                    },
                     defaultOOCTimerDelay = {
                         name = L["OOC Queue Delay"],
                         desc = L[
@@ -522,7 +510,7 @@ function GSE.GetOptionsTable()
                     ActionButtonUseKeyDownCvar = {
                         name = L["ActionButtonUseKeyDown"],
                         desc = L[
-                            "This CVAR makes WoW use your abilities when you press the key not when you release it.  To use GSE in its native configuration this needs to be checked."
+                            "This setting is a common setting used by all WoW mods.  If affects how your action buttons respond.  With this on the react when you hit the button.  With them off they react when you let them go.  In GSE's case this setting has to be off for Actionbar Overrides to work."
                         ],
                         type = "toggle",
                         tristate = false,
@@ -547,26 +535,31 @@ function GSE.GetOptionsTable()
                             end
                         end,
                         order = 541
+                    },
+                    buttonsettingstitle = {
+                        type = "header",
+                        name = L["Button Settings"],
+                        order = 550
+                    },
+                    disableLAB = {
+                        name = L["Use MultiClick Buttons"],
+                        desc = L[
+                            "GSE Sequences are converted to a button that responds to 'Clicks' or Keyboard keypresses (WoW calls these Hardware Events).  \n\nWhen you use a KeyBind with a sequence, WoW sends two hardware events each time. With this setting on, GSE then interprets these two clicks as one and advances your sequence one step.  With this off it would advance two steps.  \n\nIn comparison Actionbar Overrides and '/click SEQUENCE' macros only sends one hardware Event.  If you primarily use Keybinds over Actionbar Overrides over Keybinds you want this set to false."
+                        ],
+                        type = "toggle",
+                        set = function(info, val)
+                            GSEOptions.Multiclick = val
+                            StaticPopup_Show("GSE_ConfirmReloadUIDialog")
+                        end,
+                        get = function(info)
+                            return GSEOptions.Multiclick
+                        end,
+                        order = 551
                     }
                     -- disableExeperimental = {
                     --     type = "header",
                     --     name = L["Experimental Features"],
                     --     order = 550
-                    -- }
-                    -- disableLAB = {
-                    --     name = L["Disable inbuilt LibActionButton"],
-                    --     desc = L[
-                    --         "LibActionButton is used by ConsolePort and Bartender.  Disabling this will use the standard version of this library."
-                    --     ],
-                    --     type = "toggle",
-                    --     set = function(info, val)
-                    --         GSEOptions.DisableExperimentalLAB = val
-                    --         StaticPopup_Show("GSE_ConfirmReloadUIDialog")
-                    --     end,
-                    --     get = function(info)
-                    --         return GSEOptions.DisableExperimentalLAB
-                    --     end,
-                    --     order = 551
                     -- }
                 }
             },
@@ -1006,7 +999,7 @@ function GSE.GetOptionsTable()
                             "GSE was originally forked from GnomeSequencer written by semlar.  It was enhanced by TImothyLuke to include a lot of configuration and boilerplate functionality with a GUI added.  The enhancements pushed the limits of what the original code could handle and was rewritten from scratch into GSE.\n\nGSE itself wouldn't be what it is without the efforts of the people who write sequences with it.  Check out https://discord.gg/gseunited for the things that make this mod work.  Special thanks to Lutechi for creating the original WowLazyMacros community."
                         ],
                         order = 20,
-                        image = "Interface\\Addons\\GSE_GUI\\Assets\\GSE_Logo_Dark_512.tga",
+                        image = Statics.Icons.Logo,
                         imageWidth = 120,
                         imageHeight = 120
                     },
@@ -1024,7 +1017,7 @@ function GSE.GetOptionsTable()
                         type = "execute",
                         name = L["GSE Discord"],
                         order = 24,
-                        image = "Interface\\Addons\\GSE_GUI\\Assets\\discord.png",
+                        image = Statics.Icons.Discord,
                         imageWidth = 120,
                         imageHeight = 120,
                         func = function()
@@ -1036,7 +1029,7 @@ function GSE.GetOptionsTable()
                         type = "execute",
                         name = L["Report an Issue"],
                         order = 25,
-                        image = "Interface\\Addons\\GSE_GUI\\Assets\\github.tga",
+                        image = Statics.Icons.GitHub,
                         imageWidth = 120,
                         imageHeight = 120,
                         func = function()
@@ -1049,7 +1042,7 @@ function GSE.GetOptionsTable()
                         type = "execute",
                         name = L["Support GSE"],
                         order = 26,
-                        image = "Interface\\Addons\\GSE_GUI\\Assets\\patreon.tga",
+                        image = Statics.Icons.Patreon,
                         imageWidth = 120,
                         imageHeight = 120,
                         func = function()
@@ -1073,7 +1066,20 @@ function GSE.GetOptionsTable()
             }
         }
     }
-
+    if GSE.Patron or GSE.Developer then
+        OptionsTable.args.general.args.externalMillisecondClickRate = {
+            name = L["MS Click Rate"],
+            desc = L["The milliseconds being used in key click delay."],
+            type = "input",
+            set = function(info, val)
+                GSEOptions.msClickRate = tonumber(val)
+            end,
+            get = function(info)
+                return GSEOptions.msClickRate and tostring(GSEOptions.msClickRate) or "250"
+            end,
+            order = 385
+        }
+    end
     if GSE.Developer then
         OptionsTable.args.debug = {
             name = L["Debug"],

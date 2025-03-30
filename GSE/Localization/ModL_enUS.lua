@@ -1,13 +1,5 @@
 local L = LibStub("AceLocale-3.0"):NewLocale("GSE", "enUS", true)
 
-L["WhatsNew"] =
-    [[|cFFFFFFFFGS|r|cFF00FFFFE|r 3.2.18 updates the Actionbar Overrides for Bartender4 and ConsolePort.  This solves the issue of being in flight and not being able to use the GSE Sequence until you left combat.  ElvUI support for this will come in a later update.
-
-|cffff6666Note|r: The paging function has to be turned off for druids and potentially rogues.  The issue is when Bartender4 pages, the bar is replaces with the contents of another hidden bar.  Even if I bind a button to that bar the "click" state is not transferred to the new bar.
-
-The full detail on all of these changes is available on the GSE GitHub wiki - https://github.com/TimothyLuke/GSE-Advanced-Macro-Compiler/wiki
-]]
-
 L["Update"] = true
 L["<SEQUENCEDEBUG> |r "] = true
 L["<DEBUG> |r "] = true
@@ -799,3 +791,21 @@ L["modified in other window.  This view is now behind the current sequence."] = 
 -- #1742
 L["You cannot open a new Sequence Editor window while you are in combat.  Please exit combat and then try again."] =
     true
+
+-- #1762
+L["New Sequence"] = true
+L["Default"] = true
+L["New Variable"] = true
+
+L["WhatsNew"] =
+    "|cFFFFFFFFGS|r|cFF00FFFFE|r 3.2.25 has finally fixed being able to use castsequences and their resets within GSE.\n\nThe GUI Menu and the Editor have been redesigned.  Details are in Discord."
+
+-- #1773
+L[
+        "This setting is a common setting used by all WoW mods.  If affects how your action buttons respond.  With this on the react when you hit the button.  With them off they react when you let them go.  In GSE's case this setting has to be off for Actionbar Overrides to work."
+    ] = true
+L["Use MultiClick Buttons"] = true
+L[
+        "GSE Sequences are converted to a button that responds to 'Clicks' or Keyboard keypresses (WoW calls these Hardware Events).  \n\nWhen you use a KeyBind with a sequence, WoW sends two hardware events each time. With this setting on, GSE then interprets these two clicks as one and advances your sequence one step.  With this off it would advance two steps.  \n\nIn comparison Actionbar Overrides and '/click SEQUENCE' macros only sends one hardware Event.  If you primarily use Keybinds over Actionbar Overrides over Keybinds you want this set to false."
+    ] = true
+L["Button Settings"] = true

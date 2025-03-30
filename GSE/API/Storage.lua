@@ -933,10 +933,12 @@ function GSE.processAction(action, metaData, variables)
                 action.Interval = 2
             end
         end
+
         local returnAction = {
             ["Action"] = buildAction(action, metaData),
-            ["Interval"] = action.Interval
+            ["Interval"] = tonumber(action.Interval)
         }
+
         return returnAction
     end
 end
@@ -1044,7 +1046,7 @@ local function PCallCreateGSE3Button(spelllist, name, combatReset)
         local line
         steps[k] = {}
         for i, j in pairs(v) do
-            line = i .. "=" .. j
+            line = i .. "\002" .. j
             tinsert(steps[k], line)
         end
     end
@@ -1065,7 +1067,7 @@ for k,v in ipairs(compressedspelllist) do
     tinsert(spelllist, newtable())
 
     for _,j in ipairs(newtable(strsplit("|",v))) do
-        local a,b = strsplit("=",j)
+        local a,b = strsplit("\002",j)
         spelllist[k][a] = b
     end
 end
@@ -1079,6 +1081,41 @@ end
     local clickexecution =
         GSE.GetMacroResetImplementation() ..
         [=[
+    local mods = "RALT=" .. tostring(IsRightAltKeyDown()) .. "|" ..
+    "LALT=".. tostring(IsLeftAltKeyDown()) .. "|" ..
+    "AALT=" .. tostring(IsAltKeyDown()) .. "|" ..
+    "RCTRL=" .. tostring(IsRightControlKeyDown()) .. "|" ..
+    "LCTRL=" .. tostring(IsLeftControlKeyDown()) .. "|" ..
+    "ACTRL=" .. tostring(IsControlKeyDown()) .. "|" ..
+    "RSHIFT=" .. tostring(IsRightShiftKeyDown()) .. "|" ..
+    "LSHIFT=" .. tostring(IsLeftShiftKeyDown()) .. "|" ..
+    "ASHIFT=" .. tostring(IsShiftKeyDown()) .. "|" ..
+    "AMOD=" .. tostring(IsModifierKeyDown()) .. "|" ..
+    "MOUSEBUTTON=" .. GetMouseButtonClicked()
+    self:SetAttribute('localmods', mods)
+    local step = self:GetAttribute('step')
+    step = tonumber(step)
+    for k,v in pairs(spelllist[step]) do
+        if k == "macrotext" then
+            self:SetAttribute("macro", nil )
+            self:SetAttribute("unit", nil )
+        elseif k == "macro" then
+            self:SetAttribute("macrotext", nil )
+            self:SetAttribute("unit", nil )
+        elseif k == "Icon" then
+            -- skip
+        end
+        self:SetAttribute(k, v )
+    end
+
+    step = step % #spelllist + 1
+    self:SetAttribute('step', step)
+    self:CallMethod('UpdateIcon')
+    ]=]
+    if GSEOptions.Multiclick then
+        clickexecution =
+            GSE.GetMacroResetImplementation() ..
+            [=[
     local mods = "RALT=" .. tostring(IsRightAltKeyDown()) .. "|" ..
     "LALT=".. tostring(IsLeftAltKeyDown()) .. "|" ..
     "AALT=" .. tostring(IsAltKeyDown()) .. "|" ..
@@ -1115,7 +1152,7 @@ end
         self:CallMethod('UpdateIcon')
     end
     ]=]
-
+    end
     if GSEOptions.DebugPrintModConditionsOnKeyPress then
         clickexecution = Statics.PrintKeyModifiers .. clickexecution
     end
@@ -1154,18 +1191,7 @@ function GSE.UpdateVariable(variable, name, status)
     if GSE.V[name] and type(GSE.V[name]()) == "boolean" then
         GSE.BooleanVariables["GSE.V['" .. name .. "']()"] = "GSE.V['" .. name .. "']()"
     end
-    if GSE.GUI and GSE.GUIVariableFrame then
-        if GSE.GUIVariableFrame:IsVisible() then
-            GSE.GUIVariableFrame:SetStatusText(name .. " " .. L["Saved"])
-            C_Timer.After(
-                5,
-                function()
-                    GSE.GUIVariableFrame:SetStatusText("")
-                end
-            )
-            GSE.ShowVariables()
-        end
-    end
+    GSE:SendMessage(Statics.VARIABLE_UPDATED, name)
 end
 
 function GSE.UpdateMacro(node, category)
@@ -1184,18 +1210,7 @@ function GSE.UpdateMacro(node, category)
             end
         end
         GSE:RegisterEvent("UPDATE_MACROS")
-        if GSE.GUI and GSE.GUIMacroFrame then
-            if GSE.GUIMacroFrame:IsVisible() then
-                GSE.GUIMacroFrame:SetStatusText(node.name .. " " .. L["Saved"])
-                C_Timer.After(
-                    5,
-                    function()
-                        GSE.GUIMacroFrame:SetStatusText("")
-                    end
-                )
-                GSE.ShowMacros()
-            end
-        end
+        GSE:SendMessage(Statics.VARIABLE_UPDATED, node.name)
     end
     return node
 end
@@ -1216,11 +1231,7 @@ function GSE.ImportMacro(node)
     source[node.name] = GSE.UpdateMacro(node, characterMacro)
     GSE.Print(L["Macro"] .. " " .. node.name .. L[" was imported."], L["Macros"])
     GSE.ManageMacros()
-    if GSE.GUI and GSE.GUIMacroFrame then
-        if GSE.GUIMacroFrame:IsVisible() then
-            GSE.ShowMacros()
-        end
-    end
+    GSE:SendMessage(Statics.VARIABLE_UPDATED, node.name)
 end
 
 function GSE.CompileMacroText(text, mode)
@@ -1356,11 +1367,6 @@ function GSE.ManageMacros()
                     end
                 end
             end
-        end
-    end
-    if GSE.GUI and GSE.GUIMacroFrame then
-        if GSE.GUIMacroFrame:IsVisible() then
-            GSE.ShowMacros()
         end
     end
 end
