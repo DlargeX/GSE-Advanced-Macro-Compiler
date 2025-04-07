@@ -43,7 +43,9 @@
     "GSE",
     "NDui",
     "WrapTextInColor",
-    "FONT_COLOR_CODE_CLOSE"
+    "FONT_COLOR_CODE_CLOSE",
+    "SecureHandlerUnwrapScript",
+    "C_EncodingUtil"
   ],
   "Lua.diagnostics.disable": [
     "undefined-field",
