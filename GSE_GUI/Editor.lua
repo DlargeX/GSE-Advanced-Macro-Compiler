@@ -982,7 +982,7 @@ function GSE.CreateEditor()
         local seqTableEditbox = AceGUI:Create("MultiLineEditBox")
         seqTableEditbox:SetLabel(L["Sequence"])
         seqTableEditbox:DisableButton(true)
-        seqTableEditbox:SetNumLines(#GSE.SplitMeIntoLines(tablestring))
+        seqTableEditbox:SetNumLines(35)
         seqTableEditbox:SetRelativeWidth(0.95)
         --seqTableEditbox:SetHeight(editframe.Height - 250)
         seqTableEditbox:SetText(tablestring)
@@ -2950,24 +2950,14 @@ function GSE.CreateEditor()
                             SetBinding(initialbind)
                             destination[bind] = nil
                         end
-                        if loadout ~= "ALL" and loadout then
+                        if destination then
                             destination[bind] = button
-                            if
-                                tostring(C_ClassTalents.GetLastSelectedSavedConfigID(PlayerUtil.GetCurrentSpecID())) ==
-                                    loadout
-                             then
-                                SetBinding(bind)
-                                SetBindingClick(bind, button, _G[button])
-                            end
                         else
-                            destination[bind] = button
-                            SetBinding(bind)
-                            SetBindingClick(bind, button, _G[button])
+                            GSE.PrintDebugMessage(
+                                "Error Saving Keybind " .. bind .. " " .. button,
+                                Statics.DebugModules.Storage
+                            )
                         end
-                        if bind ~= initialbind then
-                            showKeybind(bind, button, specialization, loadout)
-                        end
-
                         editframe.ManageTree()
                         local keypath
                         if loadout ~= "ALL" and loadout then
@@ -2986,6 +2976,10 @@ function GSE.CreateEditor()
                         if keypath then
                             treeContainer:SelectByValue(keypath)
                         end
+                        GSE.ReloadKeyBindings()
+                    -- if bind ~= initialbind then
+                    --     showKeybind(bind, button, specialization, loadout)
+                    -- end
                     end
                 end
             )
@@ -3285,7 +3279,8 @@ function GSE.CreateEditor()
                         end
                         -- trigger a reload of KeyBindings
                         GSE.ReloadOverrides()
-                        GSE.UpdateIcon(_G[bind])
+
+                        GSE.UpdateIcon(_G[button.Sequence])
                         editframe.ManageTree()
                         if loadout ~= "ALL" and loadout then
                             if GetSpecialization then

@@ -268,7 +268,7 @@ function GSE.OOCUpdateSequence(name, sequence)
 
     local compiledTemplate = GSE.CompileTemplate(sequence)
     local actionCount = #compiledTemplate
-    if actionCount > 255 then
+    if actionCount > 64516 then
         GSE.Print(
             string.format(
                 L[
@@ -519,13 +519,19 @@ end
 
 function GSE.UpdateIcon(self, reseticon)
     local step = self:GetAttribute("step") or 1
+    local iteration = self:GetAttribute("iteration") or 1
+    if iteration > 1 then
+        step = step + iteration * 254
+    end
     local gsebutton = self:GetName()
     if not reseticon and self:GetAttribute("combatreset") == true then
         GSE.UsedSequences[gsebutton] = true
     end
     local mods = self:GetAttribute("localmods") or nil
+
     local executionseq = GSE.SequencesExec[gsebutton]
-    local foundSpell = executionseq[step].spell
+    local foundSpell =
+        executionseq and executionseq[step] and executionseq[step].spell and executionseq[step].spell or ""
     local spellinfo = {}
     spellinfo.iconID = Statics.QuestionMarkIconID
 
@@ -1055,27 +1061,44 @@ local function PCallCreateGSE3Button(spelllist, name, combatReset)
     for _, v in ipairs(steps) do
         table.insert(compressedsteps, string.join("|", unpack(v)))
     end
+    local bigsequence = {}
+
+    local finalsteps = 1
+    local temptable = {}
+    for k, v in ipairs(compressedsteps) do
+        table.insert(temptable, v)
+        finalsteps = finalsteps + 1
+        if finalsteps == 254 or k == #compressedsteps then
+            table.insert(bigsequence, string.join("\001", unpack(temptable)))
+            temptable = {}
+            finalsteps = 1
+        end
+    end
 
     local executestring =
         "compressedspelllist = newtable([=======[" ..
-        string.join("]=======],[=======[", unpack(compressedsteps)) ..
+        string.join("]=======],[=======[", unpack(bigsequence)) ..
             "]=======])" ..
                 [==[
-
+maxsequences = 1
 spelllist = newtable()
 for k,v in ipairs(compressedspelllist) do
     tinsert(spelllist, newtable())
-
-    for _,j in ipairs(newtable(strsplit("|",v))) do
-        local a,b = strsplit("\002",j)
-        spelllist[k][a] = b
+    for x, y in ipairs(newtable(strsplit("\001",v))) do
+        tinsert(spelllist[k], newtable())
+        for _,j in ipairs(newtable(strsplit("|",y))) do
+            local a,b = strsplit("\002",j)
+            spelllist[k][x][a] = b
+        end
     end
+    maxsequences = k
 end
 ]==]
 
     gsebutton:Execute(executestring)
     if combatReset then
         _G[name]:SetAttribute("step", 1)
+        _G[name]:SetAttribute("iteration", 1)
     end
 
     local clickexecution =
@@ -1094,8 +1117,10 @@ end
     "MOUSEBUTTON=" .. GetMouseButtonClicked()
     self:SetAttribute('localmods', mods)
     local step = self:GetAttribute('step')
+    local iteration = self:GetAttribute('iteration') or 1
     step = tonumber(step)
-    for k,v in pairs(spelllist[step]) do
+    iteration = tonumber(iteration)
+    for k,v in pairs(spelllist[iteration][step]) do
         if k == "macrotext" then
             self:SetAttribute("macro", nil )
             self:SetAttribute("unit", nil )
@@ -1108,8 +1133,14 @@ end
         self:SetAttribute(k, v )
     end
 
-    step = step % #spelllist + 1
+    if step < #spelllist[iteration] then
+        step = step % #spelllist[iteration] + 1
+    else
+        iteration = iteration % maxsequences + 1
+        step = 1
+    end
     self:SetAttribute('step', step)
+    self:SetAttribute('iteration', iteration)
     self:CallMethod('UpdateIcon')
     ]=]
     if GSEOptions.Multiclick then
@@ -1128,12 +1159,14 @@ end
     "AMOD=" .. tostring(IsModifierKeyDown()) .. "|" ..
     "MOUSEBUTTON=" .. GetMouseButtonClicked()
     self:SetAttribute('localmods', mods)
+    local iteration = self:GetAttribute('iteration') or 1
     local step = self:GetAttribute('step')
     step = tonumber(step)
+    iteration = tonumber(iteration)
     if self:GetAttribute('stepped') then
         self:SetAttribute('stepped', false)
     else
-        for k,v in pairs(spelllist[step]) do
+        for k,v in pairs(spelllist[iteration][step]) do
             if k == "macrotext" then
                 self:SetAttribute("macro", nil )
                 self:SetAttribute("unit", nil )
@@ -1146,9 +1179,16 @@ end
             self:SetAttribute(k, v )
         end
 
-        step = step % #spelllist + 1
         self:SetAttribute('stepped', true)
+        if step < #spelllist[iteration] then
+            step = step % #spelllist[iteration] + 1
+        else
+            iteration = iteration % maxsequences + 1
+            step = 1
+        end
+
         self:SetAttribute('step', step)
+        self:SetAttribute('iteration', iteration)
         self:CallMethod('UpdateIcon')
     end
     ]=]

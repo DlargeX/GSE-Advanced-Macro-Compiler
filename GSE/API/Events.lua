@@ -155,7 +155,6 @@ local function overrideActionButton(savedBind, force)
                     clickbutton = _G[Sequence]
                 }
             )
-            GSE.ButtonOverrides[Button] = Sequence
             _G[Button]:SetAttribute("type", "click")
             _G[Button]:SetAttribute("clickbutton", _G[Sequence])
 
@@ -170,6 +169,7 @@ local function overrideActionButton(savedBind, force)
             ]]
             )
         end
+        GSE.ButtonOverrides[Button] = Sequence
     else
         if not InCombatLockdown() then
             if (not GSE.ButtonOverrides[Button] or force) then
@@ -197,15 +197,14 @@ local function overrideActionButton(savedBind, force)
                 )
                 _G[Button]:SetAttribute("type", "click")
 
-                GSE.ButtonOverrides[Button] = Sequence
-
             --if number and GetBindingByKey(number) and string.upper(GetBindingByKey(number)) == string.upper(Button) then
-            --SetBindingClick(number, Button, _G[Button])
+            --SetBindingClick(number, Button, "LeftButton")
             --end
             end
 
             _G[Button]:SetAttribute("clickbutton", _G[Sequence])
         end
+        GSE.ButtonOverrides[Button] = Sequence
     end
 end
 local function LoadOverrides(force)
@@ -256,13 +255,18 @@ local function LoadOverrides(force)
                     GSE_C["ActionBarBinds"]["LoadOuts"][GetSpec()][selected]
              then
                 GSE.PrintDebugMessage("changing from " .. tostring(GSE.GetSelectedLoadoutConfigID()), "EVENTS")
-                for k, v in pairs(GSE_C["ActionBarBinds"]["LoadOuts"][GetSpec()][selected]) do
+                for _, v in pairs(GSE_C["ActionBarBinds"]["LoadOuts"][GetSpec()][selected]) do
                     overrideActionButton(v, force)
-                    GSE.ButtonOverrides[v.Sequence] = k
                 end
             end
         end
     end
+end
+
+local keybindingframe
+if GSE.GameMode == 5 then
+    keybindingframe = CreateFrame("Frame", "GSEKeyBinds", UIParent)
+    keybindingframe:Hide()
 end
 
 local function LoadKeyBindings(payload)
@@ -279,7 +283,11 @@ local function LoadKeyBindings(payload)
 
     for k, v in pairs(GSE_C["KeyBindings"][GetSpec()]) do
         if k ~= "LoadOuts" and not InCombatLockdown() then
-            SetBindingClick(k, v, _G[v])
+            SetBindingClick(k, v, "LeftButton")
+            if GSE.GameMode == 5 then
+                SetOverrideBindingClick(keybindingframe, false, k, v)
+            end
+        -- print("Bound", k, v)
         end
     end
 
@@ -296,7 +304,10 @@ local function LoadKeyBindings(payload)
                 )
                 for k, v in pairs(GSE_C["KeyBindings"][GetSpec()]["LoadOuts"][selected]) do
                     SetBinding(k)
-                    SetBindingClick(k, v, _G[v])
+                    SetBindingClick(k, v, "LeftButton")
+                    if GSE.GameMode == 5 then
+                        SetOverrideBindingClick(keybindingframe, false, k, v)
+                    end
                 end
             end
         end
