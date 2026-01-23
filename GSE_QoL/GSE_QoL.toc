@@ -1,10 +1,10 @@
-## Interface: 11507, 110200, 50500 
+## Interface: 11508, 20505, 50502, 120000, 120001
 
 ## Title: |cFFFFFFFFGS|r|cFF00FFFFE|r |cFF808080Quality of Life Updates|r
 ## Notes: GSE Quality of Life
 ## Author: TimothyLuke
 ## Version: @project-version@
-## Dependencies: GSE_Utils
+## Dependencies: GSE_Utils GSE_Options
 ## IconTexture: Interface\Addons\GSE_GUI\Assets\GSE_Logo_Dark_512
 ## Category-enUS: Combat
 ## Category-deDE: Kampf

@@ -181,7 +181,7 @@ function GSE.TranslateString(instring, mode, cleanNewLines, dropAbsolute)
         end
         output = string.gsub(output, ", ;", "; ")
 
-        output = string.gsub(output, "  ", " ")
+        output = string.gsub(output, "%s+", " ")
         return output
     end
 end
@@ -226,6 +226,7 @@ function GSE.TranslateSpell(str, mode, cleanNewLines, absolute)
             if GSEOptions.showCurrentSpells then
                 local test = tonumber(etc)
                 if test then
+                    local FindSpellOverrideByID = FindSpellOverrideByID or C_SpellBook.FindSpellOverrideByID
                     local currentSpell = FindSpellOverrideByID(test)
                     if currentSpell then
                         ---@diagnostic disable-next-line: cast-local-type
@@ -351,6 +352,7 @@ function GSE.GetSpellId(spellstring, mode, absolute)
         returnval = spellId
         -- Check for overrides like Crusade and Avenging Wrath.
         if not absolute and not GSE.isEmpty(returnval) then
+            local FindBaseSpellByID =  C_SpellBook.FindBaseSpellByID or  FindBaseSpellByID
             if FindBaseSpellByID(returnval) then
                 returnval = FindBaseSpellByID(returnval)
             -- if type(returnval) == "table" then

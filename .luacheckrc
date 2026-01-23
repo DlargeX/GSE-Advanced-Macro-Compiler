@@ -508,5 +508,9 @@ globals = {
     "C_SpecializationInfo",
     "C_AssistedCombat",
     "SetOverrideBindingClick",
-    "SetOverrideBinding"
+    "SetOverrideBinding",
+    "RegisterAttributeDriver",
+    "issecretvalue",
+    "SettingsPanel",
+    "MinimalSliderWithSteppersMixin"
 }

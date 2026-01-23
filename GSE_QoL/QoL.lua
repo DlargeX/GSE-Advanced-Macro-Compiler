@@ -232,313 +232,6 @@ if GSE.GameMode > 10 then
         return spellEditBox, macroEditBox
     end
 end
-local function compileExport(exportTable, humanReadable)
-    local exportstring =
-        GSE.EncodeMessage(
-        {
-            type = "COLLECTION",
-            payload = exportTable
-        }
-    )
-
-    if humanReadable then
-        exportstring = "# UPDATE PACKAGE NAME \n ```\n" .. exportstring .. "\n```\n\n"
-        exportstring = exportstring .. "This package consists of " .. exportTable.ElementCount .. " elements.\n"
-
-        local sequenceString = ""
-        for k, _ in pairs(exportTable.Sequences) do
-            sequenceString = sequenceString .. "- " .. k .. "\n"
-        end
-        if string.len(sequenceString) > 0 then
-            exportstring = exportstring .. "\n## " .. L["Sequences"] .. "\n" .. sequenceString
-        end
-
-        local macroString = ""
-        for k, _ in pairs(exportTable.Macros) do
-            macroString = macroString .. "- " .. k .. "\n"
-        end
-        if string.len(macroString) > 0 then
-            exportstring = exportstring .. "\n## " .. L["Macros"] .. "\n" .. macroString
-        end
-
-        local variableString = ""
-        for k, _ in pairs(exportTable.Variables) do
-            variableString = variableString .. "- " .. k .. "\n"
-        end
-        if string.len(variableString) > 0 then
-            exportstring = exportstring .. "\n## " .. L["Variables"] .. "\n" .. variableString
-        end
-    end
-    return exportstring
-end
-
-GSE.GUIAdvancedExport = function(exportframe)
-    exportframe:ReleaseChildren()
-    exportframe:SetStatusText(L["Advanced Export"])
-    local exportTable = {
-        ["Sequences"] = {},
-        ["Variables"] = {},
-        ["Macros"] = {},
-        ["ElementCount"] = 0
-    }
-
-    local HeaderRow = AceGUI:Create("SimpleGroup")
-    HeaderRow:SetLayout("Flow")
-    HeaderRow:SetFullWidth(true)
-    local SequenceDropDown = AceGUI:Create("Dropdown")
-    local cid, sid = GSE.GetCurrentClassID(), GSE.GetCurrentSpecID()
-    for k, v in GSE.pairsByKeys(GSE.GetSequenceNames(), GSE.AlphabeticalTableSortAlgorithm) do
-        local elements = GSE.split(k, ",")
-        local classid, specid = tonumber(elements[1]), tonumber(elements[2])
-        if cid ~= classid then
-            local val = GSE.GetClassName(classid) and GSE.GetClassName(classid) or L["Global"]
-            local key = classid .. val
-
-            SequenceDropDown:AddItem(key, val)
-            SequenceDropDown:SetItemDisabled(key, true)
-            cid = classid
-        end
-        if GetSpecializationInfoByID then
-            if sid ~= specid and sid > 13 and specid > 13 then
-                local val = select(2, GetSpecializationInfoByID(specid))
-                local key = specid .. val
-
-                SequenceDropDown:AddItem(key, val)
-                SequenceDropDown:SetItemDisabled(key, true)
-                sid = specid
-            end
-        end
-        SequenceDropDown:AddItem(v, v)
-    end
-    for k, _ in pairs(GSESequences[0]) do
-        SequenceDropDown:AddItem(k, k)
-    end
-    SequenceDropDown:SetMultiselect(true)
-    SequenceDropDown:SetLabel(L["Sequences"])
-
-    local VariableDropDown = AceGUI:Create("Dropdown")
-    if not GSE.isEmpty(GSEVariables) then
-        for k, _ in pairs(GSEVariables) do
-            VariableDropDown:AddItem(k, k)
-        end
-    end
-
-    local MacroDropDown = AceGUI:Create("Dropdown")
-
-    local maxmacros = MAX_ACCOUNT_MACROS + MAX_CHARACTER_MACROS + 2
-    for macid = 1, maxmacros do
-        local mname, _, _ = GetMacroInfo(macid)
-        if mname then
-            MacroDropDown:AddItem(mname, mname)
-        end
-    end
-    MacroDropDown:SetMultiselect(true)
-    MacroDropDown:SetLabel(L["Macros"])
-
-    HeaderRow:AddChild(SequenceDropDown)
-    HeaderRow:AddChild(MacroDropDown)
-    HeaderRow:AddChild(VariableDropDown)
-    exportframe:AddChild(HeaderRow)
-
-    local humanexportcheckbox = AceGUI:Create("CheckBox")
-    humanexportcheckbox:SetType("checkbox")
-
-    humanexportcheckbox:SetLabel(L["Create Human Readable Export"])
-    exportframe:AddChild(humanexportcheckbox)
-
-    humanexportcheckbox:SetValue(GSEOptions.UseWLMExportFormat)
-
-    local exportsequencebox = AceGUI:Create("MultiLineEditBox")
-    exportsequencebox:SetLabel(L["Variable"])
-    exportsequencebox:SetNumLines(22)
-    exportsequencebox:DisableButton(true)
-    exportsequencebox:SetFullWidth(true)
-    exportframe:AddChild(exportsequencebox)
-
-    VariableDropDown:SetMultiselect(true)
-    VariableDropDown:SetLabel(L["Variables"])
-    VariableDropDown:SetCallback(
-        "OnValueChanged",
-        function(obj, event, key, checked)
-            if checked then
-                local localsuccess, uncompressedVersion = GSE.DecodeMessage(GSEVariables[key])
-                uncompressedVersion.objectType = "VARIABLE"
-                uncompressedVersion.name = key
-                exportTable["Variables"][key] = GSE.EncodeMessage(uncompressedVersion)
-                exportTable.ElementCount = exportTable.ElementCount + 1
-            else
-                exportTable["Variables"][key] = nil
-                exportTable.ElementCount = exportTable.ElementCount - 1
-            end
-            exportsequencebox:SetText(compileExport(exportTable, humanexportcheckbox:GetValue()))
-        end
-    )
-    SequenceDropDown:SetCallback(
-        "OnValueChanged",
-        function(obj, event, key, checked)
-            if checked then
-                print(key)
-                exportTable["Sequences"][key] =
-                    GSE.UnEscapeTable(
-                    GSE.TranslateSequence(GSE.CloneSequence(GSE.FindSequence(key)), Statics.TranslatorMode.ID)
-                )
-                exportTable.ElementCount = exportTable.ElementCount + 1
-            else
-                exportTable["Sequences"][key] = nil
-                exportTable.ElementCount = exportTable.ElementCount - 1
-            end
-            exportsequencebox:SetText(compileExport(exportTable, humanexportcheckbox:GetValue()))
-        end
-    )
-    MacroDropDown:SetCallback(
-        "OnValueChanged",
-        function(obj, event, key, checked)
-            if checked then
-                local category = "a"
-                local source = GSEMacros[key]
-                if GSE.isEmpty(source) then
-                    local char, realm = UnitFullName("player")
-                    if GSE.isEmpty(GSEMacros[char .. "-" .. realm]) then
-                        GSEMacros[char .. "-" .. realm] = {}
-                    end
-                    if GSE.isEmpty(GSEMacros[char .. "-" .. realm][key]) then
-                        -- need to find the macro as its not managed by GSE
-                        source = {}
-                        local mslot = GetMacroIndexByName(key)
-                        local _, micon, mbody = GetMacroInfo(mslot)
-                        source.name = key
-                        source.icon = micon
-                        source.text = mbody
-                        source.managedMacro = GSE.CompileMacroText(mbody, Statics.TranslatorMode.ID)
-                        if mslot > MAX_ACCOUNT_MACROS then
-                            category = "p"
-                        end
-                        print("made new")
-                    else
-                        source = GSEMacros[char .. "-" .. realm][key]
-                        category = "p"
-                    end
-                end
-                local exportobject = GSE.CloneSequence(source)
-                exportobject.objectType = "MACRO"
-                exportobject.category = category
-                exportobject.name = key
-                exportTable["Macros"][key] = exportobject
-                exportTable.ElementCount = exportTable.ElementCount + 1
-            else
-                exportTable["Macros"][key] = nil
-                exportTable.ElementCount = exportTable.ElementCount - 1
-            end
-            exportsequencebox:SetText(compileExport(exportTable, humanexportcheckbox:GetValue()))
-        end
-    )
-    humanexportcheckbox:SetCallback(
-        "OnValueChanged",
-        function(sel, object, value)
-            exportsequencebox:SetText(compileExport(exportTable, humanexportcheckbox:GetValue()))
-        end
-    )
-end
-
-local function ProcessLegacyVariables(lines, variableTable)
-    local returnLines = {}
-    for _, line in ipairs(lines) do
-        if line ~= "/click GSE.Pause" then
-            if not GSE.isEmpty(variableTable) then
-                for key, value in pairs(variableTable) do
-                    if type(value) == "string" then
-                        local functline = value
-                        if string.sub(functline, 1, 10) == "function()" then
-                            GSE.UpdateVariable(value, key)
-                            value = '=GSE.V["' .. key '"]()'
-                        end
-                    end
-                    if type(value) == "boolean" then
-                        value = tostring(value)
-                    end
-                    if value == nil then
-                        value = ""
-                    end
-                    if type(value) == "table" then
-                        value = GSE.SafeConcat(value, "\n")
-                    end
-
-                    line = string.gsub(line, string.format("~~%s~~", key), value)
-                end
-            end
-        end
-        table.insert(returnLines, line)
-    end
-    return GSE.SafeConcat(returnLines, "\n")
-end
-
-local function buildAction(action, variables)
-    if action.Type == Statics.Actions.Loop then
-        -- we have a loop within a loop
-        return GSE.processAction(action, variables)
-    else
-        action.type = "macro"
-        local macro = ProcessLegacyVariables(action, variables)
-
-        action.macro = macro
-        action.target = " "
-        return action
-    end
-end
-
-local function processAction(action, variables)
-    if action.Type == Statics.Actions.Loop then
-        local actionList = {}
-        -- setup the interation
-        for _, v in ipairs(action) do
-            local builtaction = processAction(v, variables)
-            table.insert(actionList, builtaction)
-        end
-        -- process repeats for the block
-        for k, v in ipairs(actionList) do
-            action[k] = v
-        end
-        return action
-    elseif action.Type == Statics.Actions.Pause then
-        return action
-    elseif action.Type == Statics.Actions.If then
-        local actionList = {}
-        for _, v in ipairs(action) do
-            table.insert(processAction(v, variables))
-        end
-
-        -- process repeats for the block
-        for k, v in ipairs(actionList) do
-            action[k] = v
-        end
-        return action
-    else
-        local builtstuff = buildAction(action, variables)
-        for k, _ in ipairs(action) do
-            action[k] = nil
-        end
-
-        return builtstuff
-    end
-end
-
-function GSE.Update31Actions(sequence)
-    local seq = GSE.CloneSequence(sequence)
-    for k, _ in ipairs(seq.Macros) do
-        setmetatable(seq.Macros[k].Actions, Statics.TableMetadataFunction)
-        local actiontable = {}
-        for _, j in ipairs(seq.Macros[k].Actions) do
-            local processed = processAction(j, seq.Macros[k].Variables)
-            table.insert(actiontable, processed)
-        end
-        seq.Macros[k].Actions = actiontable
-        seq.Macros[k].Variables = nil
-        seq.Macros[k].InbuiltVariables = nil
-    end
-    seq.MetaData.Version = 3200
-    seq.WeakAuras = nil
-    return seq
-end
 
 function GSE.CreateIconControl(action, version, keyPath, sequence, frame)
     local lbl = AceGUI:Create("InteractiveLabel")
@@ -632,4 +325,174 @@ function GSE.CreateIconControl(action, version, keyPath, sequence, frame)
         end
     )
     return lbl
+end
+
+-- Skyriding Bind Bar for Retail
+if GSE.GameMode >= 11 then
+    local config = LibStub("AceConfig-3.0")
+    local dialog = LibStub("AceConfigDialog-3.0")
+    local addonName = "|cFFFFFFFFGS|r|cFF00FFFFE|r"
+    local OptionsTable = {
+        type = "group",
+        args = {
+            title = {
+                name = L["Skyriding / Vehicle Keybinds"],
+                desc = L["Override bindings for Skyriding, Vehicle, Possess and Override Bars"],
+                order = 1,
+                type = "header"
+            }
+        }
+    }
+
+    for i = 1, 12 do
+        OptionsTable.args["Skyriding" .. tostring(i)] = {
+            name = L["Skyriding Button"] .. " " .. tostring(i),
+            type = "keybinding",
+            set = function(info, val)
+                if GSE.isEmpty(GSEOptions.SkyRidingBinds) then
+                    GSEOptions.SkyRidingBinds = {}
+                end
+                GSEOptions.SkyRidingBinds[tostring(i)] = val
+                GSE.UpdateVehicleBar()
+            end,
+            get = function(info)
+                return GSEOptions.SkyRidingBinds and GSEOptions.SkyRidingBinds[tostring(i)] and
+                    GSEOptions.SkyRidingBinds[tostring(i)] or
+                    ""
+            end,
+            order = i + 1
+        }
+    end
+    config:RegisterOptionsTable(addonName .. "-Skyriding", OptionsTable)
+    dialog:AddToBlizOptions(addonName .. "-Skyriding", OptionsTable.args.title.name, GSE.MenuCategoryID) -- Hidden macro buttons that execute pet battle abilities, to click on them when the player -- enters a pet battle, with the binds assigned by the user in the vehicle binds panel
+    ----------------------------------------------------------------------------------------------------------
+
+    -- Pet battle buttons
+    local PetBattleButton = {}
+    for i = 1, 6 do
+        PetBattleButton[i] = CreateFrame("Button", "GSE_PetBattleButton" .. i, nil, "SecureActionButtonTemplate")
+        PetBattleButton[i]:RegisterForClicks("AnyDown")
+        PetBattleButton[i]:SetAttribute("type", "macro")
+        if i <= 3 then
+            PetBattleButton[i]:SetAttribute(
+                "macrotext",
+                "/run PetBattleFrame.BottomFrame.abilityButtons[" .. i .. "]:Click()"
+            )
+        end
+    end
+
+    PetBattleButton[4]:SetAttribute("macrotext", "/run PetBattleFrame.BottomFrame.SwitchPetButton:Click()")
+    PetBattleButton[5]:SetAttribute("macrotext", "/run PetBattleFrame.BottomFrame.CatchButton:Click()")
+    PetBattleButton[6]:SetAttribute("macrotext", "/run PetBattleFrame.BottomFrame.ForfeitButton:Click()") -- Hidden action bar to click on its buttons when the player enters a vehicle or -- skyriding mount, with the binds assigned by the user in the vehicle binds panel
+    -------------------------------------------------------------------------------------------------------
+
+    -- Vehicle/Skyriding bar
+    local VehicleBar = CreateFrame("Frame", nil, nil, "SecureHandlerAttributeTemplate")
+    VehicleBar:SetAttribute("actionpage", 1)
+    VehicleBar:Hide()
+
+    -- Creating buttons
+    local VehicleButton = {}
+    for i = 1, 12 do
+        VehicleButton[i] = CreateFrame("Button", "GSE_VehicleButton" .. i, VehicleBar, "SecureActionButtonTemplate")
+        local B = VehicleButton[i]
+        B:Hide()
+        B:SetID(i)
+        B:SetAttribute("type", "action")
+        B:SetAttribute("action", i)
+        B:SetAttribute("useparent-actionpage", true)
+        B:RegisterForClicks("AnyDown")
+    end
+
+    -- Table that will store the keybinds for vehicles desired by the user
+
+    function GSE.UpdateVehicleBar()
+        local tableval = {}
+        if GSE.isEmpty(GSEOptions.SkyRidingBinds) then
+            GSEOptions.SkyRidingBinds = {}
+        end
+        local tablevals = false
+        for k, v in pairs(GSEOptions.SkyRidingBinds) do
+            table.insert(tableval, k .. "\001" .. v)
+            tablevals = true
+        end
+        local executionString =
+            "VehicleKeybindTable = newtable([=======[" ..
+            string.join("]=======],[=======[", unpack(tableval)) ..
+                "]=======])" ..
+                    [[
+            VehicleKeybind = newtable()
+            for _,v in ipairs(VehicleKeybindTable) do
+                local x, y = strsplit("\001",v)
+                VehicleKeybind[tonumber(x)] = y
+            end
+
+            ]]
+        if not tablevals then
+            executionString = "VehicleKeybind = newtable()"
+        end
+        VehicleBar:Execute(executionString) -- Key: Button index / Value: Keybind
+    end
+
+    GSE.UpdateVehicleBar()
+    -- Triggers
+    VehicleBar:SetAttribute(
+        "_onattributechanged",
+        [[
+  -- Actionpage update
+  if name == "page" then
+    if HasVehicleActionBar() then self:SetAttribute("actionpage", GetVehicleBarIndex())
+    elseif HasOverrideActionBar() then self:SetAttribute("actionpage", GetOverrideBarIndex())
+    elseif HasBonusActionBar() then self:SetAttribute("actionpage", GetBonusBarIndex())
+    else self:SetAttribute("actionpage", GetActionBarPage()) end
+
+  -- Settings binds of higher priority than the normal ones when the player enters a vehicle, to be able to use it
+  elseif name == "vehicletype" then
+    if value == "vehicle" then -- Vehicles/Skyriding
+      for i = 1, 12 do
+        if VehicleKeybind[i] then self:SetBindingClick(true, VehicleKeybind[i], "GSE_VehicleButton"..i) end
+      end
+
+    elseif value == "petbattle" then -- Pet battle
+      for i = 1, 6 do
+        if VehicleKeybind[i] then self:SetBindingClick(true, VehicleKeybind[i], "GSE_PetBattleButton"..i) end
+      end
+
+    elseif value == "none" then -- No vehicle, deleting vehicle binds
+      self:ClearBindings()
+    end
+  end
+]]
+    )
+
+    -- Actionpage trigger
+    RegisterAttributeDriver(VehicleBar, "page", "[vehicleui] A; [possessbar] B; [overridebar] C; [bonusbar:5] D; E")
+
+    -- Vehicle trigger
+    RegisterAttributeDriver(
+        VehicleBar,
+        "vehicletype",
+        "[vehicleui][possessbar][overridebar][bonusbar:5] vehicle;" .. "[petbattle] petbattle;" .. "none"
+    ) -- Event PET_BATTLE_OPENING_START -- Triggers when a pet battle starts. Used only in MoP because it doesn't have the [petbattle] -- macro condition to detect pet battles from the Restricted Environment like post-MoP expansions.
+    ----------------------------------------------------------------------------------------------------------------------
+
+    --[[ Events ]]
+    function GSE:PET_BATTLE_OPENING_START()
+        VehicleBar:Execute(
+            [[
+    for i = 1, 6 do
+      if VehicleKeybind[i] then self:SetBindingClick(true, VehicleKeybind[i], "GSE_PetBattleButton"..i) end
+    end
+  ]]
+        )
+    end
+
+    -- Event PET_BATTLE_CLOSE
+    -- Triggers when a pet battle starts. Used only in MoP because it doesn't have the [petbattle]
+    -- macro condition to detect pet battles from the Restricted Environment like post-MoP expansions.
+    function GSE:PET_BATTLE_CLOSE()
+        VehicleBar:Execute([[ self:ClearBindings() ]])
+    end
+    GSE:RegisterEvent("PET_BATTLE_OPENING_START")
+    GSE:RegisterEvent("PET_BATTLE_CLOSE")
 end

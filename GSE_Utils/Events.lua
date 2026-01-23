@@ -80,17 +80,33 @@ function GSE.TraceSequence(button, step, spell)
     end
 end
 
-function GSE:UNIT_SPELLCAST_SUCCEEDED(event, unit, action)
+function GSE:UNIT_SPELLCAST_SUCCEEDED(event, unit, action, sped)
     if unit == "player" then
         local GCD_Timer
-        if C_Spell.GetSpellCooldown then
-            GCD_Timer = C_Spell.GetSpellCooldown(61304)["duration"]
+        local elements = GSE.split(action, "-")
+        if GSE.GameMode > 1 then
+            if C_Spell.GetSpellCooldown then
+                if GSE.GameMode > 11 then
+                    local spellid = elements[6]
+                    local potentialGCD = C_Spell.GetSpellCooldown(spellid)["duration"]
+                    if issecretvalue(potentialGCD)then
+                        GCD_Timer = GSE.GetGCD()
+                    else
+                        GCD_Timer = potentialGCD
+                    end
+                else
+                    GCD_Timer = GSE.GetGCD()
+                end
+            else
+                ---@diagnostic disable-next-line: deprecated
+                local _, gtime = GetSpellCooldown(61304)
+                GCD_Timer = gtime
+            end
         else
-            ---@diagnostic disable-next-line: deprecated
-            local _, gtime = GetSpellCooldown(61304)
-            GCD_Timer = gtime
+            GCD_Timer = 1.5
         end
         GCD = true
+
         C_Timer.After(
             GCD_Timer,
             function()
@@ -100,8 +116,6 @@ function GSE:UNIT_SPELLCAST_SUCCEEDED(event, unit, action)
         )
         GSE.PrintDebugMessage("GCD Delay:" .. " " .. GCD_Timer)
         GSE.CurrentGCD = GCD_Timer
-
-        local elements = GSE.split(action, "-")
 
         local foundskill = false
         if GSE.GameMode > 10 then
@@ -133,5 +147,4 @@ function GSE:UNIT_SPELLCAST_SUCCEEDED(event, unit, action)
         end
     end
 end
-
 GSE:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
