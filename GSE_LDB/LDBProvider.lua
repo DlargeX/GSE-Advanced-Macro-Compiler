@@ -1,9 +1,15 @@
-local GSE = GSE
+local _, ns = ...
+ns.deferred = ns.deferred or {}
 
+local function setup()
+local GSE = ns.GSE
 local Statics = GSE.Static
 local L = GSE.L
 
-local iconSource = Statics.Icons.GSE_Logo_Dark
+-- Prefer the dedicated MinimapIcon (new wrench-style PNG) when defined,
+-- fall back to the legacy GSE_Logo_Dark BLP for forward/backward
+-- compatibility with builds that don't have the new constant.
+local iconSource = Statics.Icons.MinimapIcon or Statics.Icons.GSE_Logo_Dark
 
 local ldb = LibStub:GetLibrary("LibDataBroker-1.1")
 
@@ -37,7 +43,8 @@ local LibQTip = LibStub("LibQTip-2.0")
 local LibSharedMedia = LibStub("LibSharedMedia-3.0")
 
 local icon = LibStub("LibDBIcon-1.0")
-icon:Register(L["GSE"] .. " " .. L["Gnome Sequencer Enhanced"], dataobj, GSEOptions.showMiniMap)
+local dataObjectName = L["GSE"] .. " " .. L["Gnome Sequencer Enhanced"]
+icon:Register(dataObjectName, dataobj, GSEOptions.showMiniMap)
 
 local LibDBCompartment = LibStub:GetLibrary("LibDBCompartment-1.0")
 LibDBCompartment:Register(L["GSE"], dataobj)
@@ -66,7 +73,7 @@ local function CheckOOCQueueStatus()
   return output
 end
 
-local function prepareTooltipOOCLine(row, OOCEvent, oockey)
+local function prepareTooltipOOCLine(row, OOCEvent, oockey, rebuildFn)
   local x = row:GetCell(1)
   x:SetText(OOCEvent.action)
   x:SetJustifyH("LEFT")
@@ -106,14 +113,36 @@ local function prepareTooltipOOCLine(row, OOCEvent, oockey)
   row:SetScript(
     "OnMouseDown",
     function()
+      local label = OOCEvent.action
+      if OOCEvent.action == "UpdateSequence" then
+        label = label .. " (" .. (OOCEvent.name or "?") .. ")"
+      elseif OOCEvent.action == "Save" or OOCEvent.action == "Replace"
+          or OOCEvent.action == "MergeSequence" or OOCEvent.action == "CheckMacroCreated" then
+        label = label .. " (" .. (OOCEvent.sequencename or "?") .. ")"
+      elseif OOCEvent.action == "updatemacro" or OOCEvent.action == "importmacro" then
+        label = label .. " (" .. (OOCEvent.node and OOCEvent.node.name or "?") .. ")"
+      elseif OOCEvent.action == "updatevariable" then
+        label = label .. " (" .. (OOCEvent.name or "?") .. ")"
+      end
       table.remove(GSE.OOCQueue, oockey)
+      GSE.Print("OOC queue: manually removed " .. label)
+      rebuildFn()
     end
   )
 end
 
 function dataobj:OnEnter()
+  -- Capture self so the rebuild closure can re-invoke OnEnter after a queue change.
+  local buttonSelf = self
+  local function rebuildTooltip()
+    if buttonSelf.tooltip then
+      buttonSelf.tooltip:Release()
+      buttonSelf.tooltip = nil
+    end
+    dataobj.OnEnter(buttonSelf)
+  end
+
   -- Acquire a tooltip with 3 columns, respectively aligned to left, center and right
-  --local tooltip = LibQTip:Acquire("GSSE", 3, "LEFT", "CENTER", "RIGHT")
   local tooltip = LibQTip:AcquireTooltip("GSE", 3, "LEFT", "CENTER", "RIGHT")
   self.tooltip = tooltip
   tooltip:SetHighlightTexture("Interface\\FriendsFrame\\UI-FriendsFrame-HighlightBar")
@@ -194,11 +223,12 @@ function dataobj:OnEnter()
         "OnMouseDown",
         function()
           GSE.OOCQueue = {}
+          rebuildTooltip()
         end
       )
       for k, v in ipairs(GSE.OOCQueue) do
         y = tooltip:AddRow()
-        prepareTooltipOOCLine(y, v, k)
+        prepareTooltipOOCLine(y, v, k, rebuildTooltip)
       end
     else
       -- No Items
@@ -230,25 +260,47 @@ function dataobj:OnLeave()
 end
 
 
-function dataobj:OnClick(button)
-  if GSE.CheckGUI() then
-    if button == "LeftButton" then
-      GSE.ShowSequences()
-    elseif button == "MiddleButton" then
-      GSE.ShowKeyBindings()
-    elseif button == "RightButton" then
-      GSE.GUIShowDebugWindow()
-    end
+local function normaliseMouseButton(button)
+  button = tostring(button or "")
+  button = button:gsub("Up$", ""):gsub("Down$", "")
+  return button
+end
+
+local function ensureGUI()
+  if GSE.UnsavedOptions and GSE.UnsavedOptions["GUI"] then return true end
+  if GSE.CheckGUI then GSE.CheckGUI() end
+  return (GSE.UnsavedOptions and GSE.UnsavedOptions["GUI"]) or GSE.ShowSequences or GSE.GUIShowDebugWindow
+end
+
+local function handleDataObjectClick(button)
+  button = normaliseMouseButton(button)
+  if not ensureGUI() then return end
+
+  if button == "LeftButton" then
+    if GSE.ShowSequences then GSE.ShowSequences() end
+  elseif button == "MiddleButton" then
+    if GSE.ShowKeyBindings then GSE.ShowKeyBindings() end
+  elseif button == "RightButton" then
+    if GSE.GUIShowDebugWindow then GSE.GUIShowDebugWindow() end
   end
+end
+
+function dataobj:OnClick(button)
+  handleDataObjectClick(button)
+end
+
+local minimapButton = icon.GetMinimapButton and icon:GetMinimapButton(dataObjectName)
+if minimapButton then
+  minimapButton:RegisterForClicks("AnyUp")
 end
 
 
 function GSE.miniMapShow()
-  icon:Show(L["GSE"] .. " " .. L["Gnome Sequencer Enhanced"])
+  icon:Show(dataObjectName)
 end
 
 function GSE.miniMapHide()
-  icon:Hide(L["GSE"] .. " " .. L["Gnome Sequencer Enhanced"])
+  icon:Hide(dataObjectName)
 end
 
 --- This shows or hides the minimap icon.
@@ -278,3 +330,5 @@ local GCDLDB =
 GSE.GCDLDB = GCDLDB
 
 GSE.LDB = true
+end
+table.insert(ns.deferred, setup)

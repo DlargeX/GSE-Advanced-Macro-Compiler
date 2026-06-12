@@ -1,411 +1,263 @@
-local GSE = GSE
+local _, ns = ...
+ns.deferred = ns.deferred or {}
 
+local function setup()
+local GSE = ns.GSE
 local Statics = GSE.Static
-
-local AceGUI = LibStub("AceGUI-3.0")
-local AceEvent = LibStub("AceEvent-3.0")
 local L = GSE.L
 
-local playerSpells = {}
+-- ============================================================================
+-- Macro Insertion Toolbar moved to the GSE_MacroToolbar addon.
+-- This file now contains the native icon picker, OnBuildIconMenu, Patron
+-- sequence checksum stamper, and the Skyriding Bind Bar (Retail only).
+-- See GSE_MacroToolbar/MacroToolbar.lua for the toolbar code.
+-- ============================================================================
 
-function GSE.PlayerSpellsLoaded()
-    return #playerSpells > 0
+
+-- Native WoW icon picker, owned by GSE.
+--
+-- Pattern lifted from Jaliborc/BagBrother config/panels/ruleEdit.lua Ã¢â‚¬â€
+-- the only public addon I found that successfully creates a STANDALONE
+-- popup from IconSelectorPopupFrameTemplate (rather than borrowing
+-- Blizzard's MacroPopupFrame, which is hard-coupled to MacroFrame and
+-- silently does nothing when shown without it). Critical bits the
+-- earlier "obvious" implementation missed:
+--   * Explicit SetSize Ã¢â‚¬â€ the template's XML <Size> doesn't reliably
+--     apply to a CreateFrame'd virtual template instance.
+--   * Explicit SetPoint on `IconSelector` inside `BorderBox`. Without
+--     this the icon grid has no anchor, so even though the popup is
+--     "showing" you see nothing render.
+--   * iconDataProvider + SetSelectionsDataProvider + SelectedCallback
+--     wired ONCE at frame creation, not per-show. The template mixin
+--     already provides GetIconByIndex/GetNumIcons/GetIndexOfIcon as
+--     dataProvider proxies, so we don't redefine them.
+--   * No OnShow / OnHide override needed Ã¢â‚¬â€ the template's own OnShow
+--     handles event registration; we just position once.
+local iconPickerCallback = nil
+local iconPickerFrame = nil
+
+local function buildIconPickerFrame()
+    if iconPickerFrame then return iconPickerFrame end
+    if not IconSelectorPopupFrameTemplateMixin then return nil end
+
+    local f = CreateFrame("Frame", "GSE_IconSelectorPopupFrame", UIParent, "IconSelectorPopupFrameTemplate")
+    f:Hide()
+    -- The template's instantiation adds its own anchor (TOPLEFT to UIParent),
+    -- so a plain SetPoint("CENTER") gets queued AFTER it -- GetPoint(1)
+    -- returns TOPLEFT and the popup paints in the screen's top-left corner
+    -- (behind addon trays, easy to miss). MakePopup's center=true clears
+    -- all points first, then anchors centre -- same pattern Jaliborc/
+    -- BagBrother uses.
+    GSE.UI.MakePopup(f, {center = true, movable = true})
+
+    -- Strip the macro-name workflow Blizzard's template assumes Ã¢â‚¬â€ the
+    -- name editbox, its header label, the "Currently Selected" preview
+    -- on the right, and the Okay button itself are all geared toward
+    -- creating/editing a named macro. We just want "click an icon Ã¢â€ â€™
+    -- return it." Hide them all and skip the Okay-button confirm step.
+    if f.BorderBox then
+        if f.BorderBox.IconSelectorEditBox    then f.BorderBox.IconSelectorEditBox:Hide() end
+        if f.BorderBox.EditBoxHeaderText      then f.BorderBox.EditBoxHeaderText:Hide() end
+        if f.BorderBox.SelectedIconArea       then f.BorderBox.SelectedIconArea:Hide() end
+        if f.BorderBox.OkayButton             then f.BorderBox.OkayButton:Hide() end
+    end
+
+    -- Initialise the icon data provider ONCE. Methods GetIconByIndex /
+    -- GetNumIcons / GetIndexOfIcon are inherited from
+    -- IconSelectorPopupFrameTemplateMixin and auto-proxy through this.
+    f.iconDataProvider = CreateAndInitFromMixin(
+        IconDataProviderMixin, IconDataProviderExtraType.None)
+
+    -- The icon grid needs an explicit anchor inside the BorderBox.
+    -- Anchored higher than BagBrother's offset because we hid the
+    -- name-entry section above it.
+    f.IconSelector:ClearAllPoints()
+    f.IconSelector:SetPoint("TOPLEFT", f.BorderBox, "TOPLEFT", 21, -56)
+    f.IconSelector:SetSelectionsDataProvider(
+        GenerateClosure(f.GetIconByIndex, f),
+        GenerateClosure(f.GetNumIcons,    f))
+
+    -- Single-click commit: as soon as the user picks an icon, fire the
+    -- callback and hide. Cancel button still works normally Ã¢â‚¬â€ the user
+    -- can dismiss without a selection. No Okay-button round-trip.
+    f.IconSelector:SetSelectedCallback(function(_, icon)
+        if iconPickerCallback and icon then
+            local cb = iconPickerCallback
+            iconPickerCallback = nil
+            cb(icon)
+        end
+        f:Hide()
+    end)
+
+    -- Trim the popup height since we removed the top section.
+    f:SetSize(525, 460)
+
+    -- Cancel still works Ã¢â‚¬â€ clear pending callback so a later Show
+    -- doesn't accidentally fire it.
+    function f:CancelButton_OnClick()
+        IconSelectorPopupFrameTemplateMixin.CancelButton_OnClick(self)
+        iconPickerCallback = nil
+    end
+
+    iconPickerFrame = f
+    return f
 end
 
-if GSE.GameMode > 10 then
-    local function loadPlayerSpells()
-        table.wipe(playerSpells)
-
-        for tab = 2, C_SpellBook.GetNumSpellBookSkillLines() do
-            local lineinfo = C_SpellBook.GetSpellBookSkillLineInfo(tab)
-            local offset = lineinfo.itemIndexOffset
-
-            for i = 0, lineinfo.numSpellBookItems do
-                local spellinfo = C_SpellBook.GetSpellBookItemInfo(i + offset, 0)
-
-                local spellName = spellinfo.name
-                --local spellID = spellinfo.spellID
-                local offspec = spellinfo.isOffSpec
-                local passive = spellinfo.isPassive
-                if not passive and not offspec and spellName then
-                    table.insert(playerSpells, spellName)
-                end
-            end
-        end
-        table.sort(playerSpells)
+local function ShowNativeIconPicker(callback)
+    local f = buildIconPickerFrame()
+    if not f then
+        GSE.Print("|cffff6666GSE QoL:|r icon picker template unavailable.", "Error")
+        return
     end
-
-    AceEvent:RegisterEvent("SPELLS_CHANGED", loadPlayerSpells)
-    AceEvent:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED", loadPlayerSpells)
-    AceEvent:RegisterEvent("TRAIT_CONFIG_UPDATED", loadPlayerSpells)
-    AceEvent:RegisterEvent("PLAYER_TALENT_UPDATE", loadPlayerSpells)
-
-    GSE.CreateSpellEditBox = function(action, version, keyPath, sequence, compiledMacro, frame)
-        if GSE.isEmpty(action.type) then
-            action.type = "spell"
+    iconPickerCallback = callback
+    -- Scroll the grid to its top on each open so it renders cleanly.
+    -- Wrapped in pcall because the icon data provider can lazy-init
+    -- and throw on the first show after a /reload Ã¢â‚¬â€ when invoked from
+    -- inside a context-menu callback the menu system swallows errors
+    -- silently and the user just sees nothing happen.
+    local ok, err = pcall(function()
+        if f.IconSelector and f.iconDataProvider and f.iconDataProvider:GetNumIcons() > 0 then
+            f.IconSelector:SetSelectedIndex(1)
+            f.IconSelector:ScrollToSelectedIndex()
         end
-
-        local spellEditBox = AceGUI:Create("EditBox")
-
-        spellEditBox:SetWidth(250)
-        spellEditBox:DisableButton(true)
-        if #playerSpells < 1 then
-            loadPlayerSpells()
-        end
-        if GSE.isEmpty(sequence.Macros[version].Actions[keyPath].type) then
-            sequence.Macros[version].Actions[keyPath].type = "spell"
-        end
-        if GSE.isEmpty(action.type) then
-            action.type = "spell"
-        end
-
-        local spelltext
-
-        if action.toy then
-            spelltext = action.toy
-            spellEditBox:SetLabel(L["Toy"])
-        elseif action.item then
-            spelltext = action.item
-            spellEditBox:SetLabel(L["Item"])
-        elseif action.macro then
-            if string.sub(GSE.UnEscapeString(action.macro), 1, 1) == "/" then
-                spelltext = GSE.CompileMacroText(action.macro, Statics.TranslatorMode.Current)
-            else
-                spelltext = action.macro
-            end
-        elseif action.action then
-            spellEditBox:SetLabel(L["Pet Ability"])
-            spelltext = action.action
-        else
-            spellEditBox:SetLabel(L["Spell"])
-            local translatedSpell = GSE.GetSpellId(action.spell, Statics.TranslatorMode.Current)
-            if translatedSpell then
-                spelltext = translatedSpell
-            else
-                spelltext = action.spell
-            end
-        end
-
-        spellEditBox:SetText(spelltext)
-        --local compiledAction = GSE.CompileAction(action, sequence.Macros[version])
-        spellEditBox:SetCallback(
-            "OnTextChanged",
-            function(sel, object, value)
-                if sequence.Macros[version].Actions[keyPath].type == "pet" then
-                    sequence.Macros[version].Actions[keyPath].action = value
-                    sequence.Macros[version].Actions[keyPath].spell = nil
-                    sequence.Macros[version].Actions[keyPath].macro = nil
-                    sequence.Macros[version].Actions[keyPath].item = nil
-                    sequence.Macros[version].Actions[keyPath].toy = nil
-                elseif sequence.Macros[version].Actions[keyPath].type == "item" then
-                    sequence.Macros[version].Actions[keyPath].item = value
-                    sequence.Macros[version].Actions[keyPath].spell = nil
-                    sequence.Macros[version].Actions[keyPath].action = nil
-                    sequence.Macros[version].Actions[keyPath].macro = nil
-                    sequence.Macros[version].Actions[keyPath].toy = nil
-                elseif sequence.Macros[version].Actions[keyPath].type == "toy" then
-                    sequence.Macros[version].Actions[keyPath].toy = value
-                    sequence.Macros[version].Actions[keyPath].spell = nil
-                    sequence.Macros[version].Actions[keyPath].action = nil
-                    sequence.Macros[version].Actions[keyPath].macro = nil
-                    sequence.Macros[version].Actions[keyPath].item = nil
-                else
-                    local storedValue = GSE.GetSpellId(value, Statics.TranslatorMode.ID)
-                    if storedValue then
-                        sequence.Macros[version].Actions[keyPath].spell = storedValue
-                    else
-                        sequence.Macros[version].Actions[keyPath].spell = value
-                    end
-                    sequence.Macros[version].Actions[keyPath].action = nil
-                    sequence.Macros[version].Actions[keyPath].macro = nil
-                    sequence.Macros[version].Actions[keyPath].item = nil
-                    sequence.Macros[version].Actions[keyPath].toy = nil
-                end
-
-                --compiledAction = GSE.CompileAction(returnAction, sequence.Macros[version])
-            end
-        )
-        spellEditBox:SetCallback(
-            "OnEditFocusLost",
-            function()
-            end
-        )
-
-        local macroEditBox = AceGUI:Create("MultiLineEditBox")
-        macroEditBox:SetLabel(L["Macro Name or Macro Commands"])
-        macroEditBox:DisableButton(true)
-        macroEditBox:SetNumLines(5)
-        macroEditBox:SetRelativeWidth(0.5)
-        macroEditBox:SetText(spelltext)
-        macroEditBox:SetCallback(
-            "OnTextChanged",
-            function(sel, object, value)
-                value = GSE.UnEscapeString(value)
-                if string.sub(value, 1, 1) == "/" then
-                    sequence.Macros[version].Actions[keyPath].macro =
-                        GSE.CompileMacroText(value, Statics.TranslatorMode.ID)
-                else
-                    sequence.Macros[version].Actions[keyPath].macro = value
-                end
-                sequence.Macros[version].Actions[keyPath].spell = nil
-                sequence.Macros[version].Actions[keyPath].action = nil
-                sequence.Macros[version].Actions[keyPath].item = nil
-                sequence.Macros[version].Actions[keyPath].toy = nil
-                local compiledmacrotext =
-                    GSE.UnEscapeString(GSE.CompileMacroText(action.macro, Statics.TranslatorMode.String))
-                local lenMacro = string.len(compiledmacrotext)
-                compiledmacrotext = compiledmacrotext .. "\n\n" .. string.format(L["%s/255 Characters Used"], lenMacro)
-                compiledMacro:SetText(compiledmacrotext)
-            end
-        )
-
-        if GSE.Patron then
-            spellEditBox.editbox:SetScript(
-                "OnTabPressed",
-                function(widget, button, down)
-                    -- if button == "RightButton" then
-                    MenuUtil.CreateContextMenu(
-                        frame,
-                        function(ownerRegion, rootDescription)
-                            rootDescription:CreateTitle(L["Insert Spell"])
-                            for _, v in pairs(playerSpells) do
-                                rootDescription:CreateButton(
-                                    v,
-                                    function()
-                                        spellEditBox:SetText(v)
-                                        sequence.Macros[version].Actions[keyPath].spell = v
-                                    end
-                                )
-                            end
-
-                            rootDescription:CreateTitle(L["Insert GSE Variable"])
-                            for k, _ in pairs(GSEVariables) do
-                                rootDescription:CreateButton(
-                                    k,
-                                    function()
-                                        spellEditBox:SetText("\n" .. [[=GSE.V["]] .. k .. [["]()]])
-                                        sequence.Macros[version].Actions[keyPath].spell =
-                                            "\n" .. [[=GSE.V["]] .. k .. [["]()]]
-                                    end
-                                )
-                            end
-                        end
-                    )
-                end
-            )
-
-            macroEditBox.editBox:SetScript(
-                "OnTabPressed",
-                function(widget, button, down)
-                    -- if button == "RightButton" then
-                    MenuUtil.CreateContextMenu(
-                        frame,
-                        function(ownerRegion, rootDescription)
-                            rootDescription:CreateTitle(L["Insert Spell"])
-                            for _, v in pairs(playerSpells) do
-                                rootDescription:CreateButton(
-                                    v,
-                                    function()
-                                        macroEditBox.editBox:Insert(v)
-                                        sequence.Macros[version].Actions[keyPath].spell = v
-                                    end
-                                )
-                            end
-
-                            rootDescription:CreateTitle(L["Insert GSE Variable"])
-                            for k, _ in pairs(GSEVariables) do
-                                rootDescription:CreateButton(
-                                    k,
-                                    function()
-                                        macroEditBox.editBox:Insert("\n" .. [[=GSE.V["]] .. k .. [["]()]])
-                                        sequence.Macros[version].Actions[keyPath].spell =
-                                            "\n" .. [[=GSE.V["]] .. k .. [["]()]]
-                                    end
-                                )
-                            end
-                        end
-                    )
-                end
-            )
-        end
-
-        return spellEditBox, macroEditBox
+    end)
+    if not ok then
+        GSE.Print("|cffff6666GSE QoL:|r icon picker init failed: " .. tostring(err), "Error")
     end
+    f:Show()
 end
 
-function GSE.CreateIconControl(action, version, keyPath, sequence, frame)
-    local lbl = AceGUI:Create("InteractiveLabel")
-    lbl:SetFontObject(GameFontNormalLarge)
-    lbl:SetWidth(25)
-    lbl:SetHeight(25)
-
-    if action.Icon then
-        lbl:SetText("|T" .. action.Icon .. ":0|t")
-    else
-        local spellinfo = {}
-        spellinfo.iconID = Statics.QuestionMarkIconID
-        if action.type == "macro" then
-            local macro = GSE.UnEscapeString(action.macro)
-            if string.sub(macro, 1, 1) == "/" then
-                local spellstuff = GSE.GetSpellsFromString(macro)
-                if spellstuff and #spellstuff > 1 then
-                    spellstuff = spellstuff[1]
-                end
-                if spellstuff then
-                    spellinfo = spellstuff
-                end
-            else
-                spellinfo.name = action.macro
-                local macindex = GetMacroIndexByName(spellinfo.name)
-                local _, iconid, _ = GetMacroInfo(macindex)
-                spellinfo.iconID = iconid
-            end
-        elseif action.type == "Spell" then
-            spellinfo = C_Spell.GetSpellInfo(action.spell)
-        end
-        if spellinfo.iconID then
-            lbl:SetText("|T" .. spellinfo.iconID .. ":0|t")
-        end
-    end
-    local spellinfolist = {}
-
-    if action.type == "macro" then
-        local macro = GSE.UnEscapeString(action.macro)
-        if string.sub(macro, 1, 1) == "/" then
-            local lines = GSE.SplitMeIntoLines(macro)
-            for _, v in ipairs(lines) do
-                local spellinfo = GSE.GetSpellsFromString(v)
-                if spellinfo and #spellinfo > 1 then
-                    for _, j in ipairs(spellinfo) do
-                        if j and j.iconID then
-                            table.insert(spellinfolist, j)
-                        end
-                    end
-                else
-                    if spellinfo and spellinfo.iconID then
-                        table.insert(spellinfolist, spellinfo)
-                    end
-                end
-            end
-        else
-            local spellinfo = {}
-            spellinfo.name = action.macro
-            local macindex = GetMacroIndexByName(spellinfo.name)
-            local _, iconid, _ = GetMacroInfo(macindex)
-            if macindex and iconid then
-                spellinfo.iconID = iconid
-                table.insert(spellinfolist, spellinfo)
-            end
-        end
-    elseif action.type == "Spell" then
-        local spellinfo = C_Spell.GetSpellInfo(action.spell)
-        if spellinfo and spellinfo.iconID then
-            table.insert(spellinfolist, spellinfo)
-        end
-    end
-
-    lbl:SetCallback(
-        "OnClick",
-        function(widget, button)
-            MenuUtil.CreateContextMenu(
-                frame,
-                function(ownerRegion, rootDescription)
-                    rootDescription:CreateTitle(L["Select Icon"])
-                    for _, v in pairs(spellinfolist) do
-                        rootDescription:CreateButton(
-                            "|T" .. v.iconID .. ":0|t " .. v.name,
-                            function()
-                                lbl:SetText("|T" .. v.iconID .. ":0|t")
-                                sequence.Macros[version].Actions[keyPath].Icon = v.iconID
-                            end
-                        )
-                    end
-                end
-            )
-        end
-    )
-    return lbl
+-- Appended to the icon context menu in the editor for QoL users.
+GSE.OnBuildIconMenu = function(rootDescription, lbl, sequence, version, keyPath)
+    rootDescription:CreateDivider()
+    rootDescription:CreateButton(L["Choose any icon..."], function()
+        ShowNativeIconPicker(function(iconID)
+            lbl:SetText("|T" .. iconID .. ":0|t")
+            sequence.Versions[version].Actions[keyPath].Icon = iconID
+            sequence.Versions[version].Actions[keyPath].IconUserSelected = true
+        end)
+    end)
 end
+
+-- Patron feature: stamp the checksum onto the locally saved sequence on every save.
+-- Non-patrons only receive a checksum via the export path.
+local function onSequenceSaved(_, sequenceName)
+    if not GSE.Patron then return end
+    if not GSE.ComputeSequenceChecksum then return end
+    for classid = 0, 13 do
+        local seq = GSE.Library[classid] and GSE.Library[classid][sequenceName]
+        if seq and seq.MetaData then
+            seq.MetaData.Checksum = GSE.ComputeSequenceChecksum(seq)
+            GSESequences[classid][sequenceName] = GSE.EncodeMessage({sequenceName, seq})
+            break
+        end
+    end
+end
+GSE:RegisterMessage(Statics.Messages.SEQUENCE_UPDATED, onSequenceSaved)
 
 -- Skyriding Bind Bar for Retail
 if GSE.GameMode >= 11 then
-    local config = LibStub("AceConfig-3.0")
-    local dialog = LibStub("AceConfigDialog-3.0")
-    local addonName = "|cFFFFFFFFGS|r|cFF00FFFFE|r"
-    local OptionsTable = {
-        type = "group",
-        args = {
-            title = {
-                name = L["Skyriding / Vehicle Keybinds"],
-                desc = L["Override bindings for Skyriding, Vehicle, Possess and Override Bars"],
-                order = 1,
-                type = "header"
-            }
-        }
-    }
+    -- Native Blizzard Settings subcategory. Lifted from the master-branch
+    -- pattern that was overwritten by the AceGUI removal pass — register a
+    -- vertical layout subcategory and add native button initializers, one
+    -- per vehicle slot. CreateSettingsButtonInitializer + SettingsPanel are
+    -- standard Blizzard APIs (11.0+); the panel rebuilds each open from
+    -- the initializer data so the displayed text always reflects what
+    -- was saved.
+    local skyOptions = Settings.RegisterVerticalLayoutSubcategory(
+        Settings.GetCategory(GSE.MenuCategoryID),
+        L["Skyriding / Vehicle Keybinds"]
+    )
 
-    for i = 1, 12 do
-        OptionsTable.args["Skyriding" .. tostring(i)] = {
-            name = L["Skyriding Button"] .. " " .. tostring(i),
-            type = "keybinding",
-            set = function(info, val)
-                if GSE.isEmpty(GSEOptions.SkyRidingBinds) then
-                    GSEOptions.SkyRidingBinds = {}
-                end
-                GSEOptions.SkyRidingBinds[tostring(i)] = val
-                GSE.UpdateVehicleBar()
-            end,
-            get = function(info)
-                return GSEOptions.SkyRidingBinds and GSEOptions.SkyRidingBinds[tostring(i)] and
-                    GSEOptions.SkyRidingBinds[tostring(i)] or
-                    ""
-            end,
-            order = i + 1
-        }
+    do
+        local layout = SettingsPanel:GetLayout(skyOptions)
+        layout:AddInitializer(Settings.CreateElementInitializer("SettingsListSectionHeaderTemplate", {
+            name = L["Skyriding / Vehicle Keybinds"],
+            tooltip = "Override bindings for Skyriding, Vehicle, Possess and Override Bars",
+        }))
     end
-    config:RegisterOptionsTable(addonName .. "-Skyriding", OptionsTable)
-    dialog:AddToBlizOptions(addonName .. "-Skyriding", OptionsTable.args.title.name, GSE.MenuCategoryID) -- Hidden macro buttons that execute pet battle abilities, to click on them when the player -- enters a pet battle, with the binds assigned by the user in the vehicle binds panel
-    ----------------------------------------------------------------------------------------------------------
 
-    -- Pet battle buttons
-    local PetBattleButton = {}
-    for i = 1, 6 do
-        PetBattleButton[i] = CreateFrame("Button", "GSE_PetBattleButton" .. i, nil, "SecureActionButtonTemplate")
-        PetBattleButton[i]:RegisterForClicks("AnyDown")
-        PetBattleButton[i]:SetAttribute("type", "macro")
-        if i <= 3 then
-            PetBattleButton[i]:SetAttribute(
-                "macrotext",
-                "/run PetBattleFrame.BottomFrame.abilityButtons[" .. i .. "]:Click()"
-            )
+    local slotInits = {}
+
+    local function onKeyDown(self, key)
+        if key == "LCTRL" or key == "RCTRL" or key == "LALT" or key == "RALT" or
+           key == "LSHIFT" or key == "RSHIFT" or key == "LMETA" or key == "RMETA" then
+            return
+        end
+        local slotIndex = self.gseSlot
+        local binding
+        if key == "ESCAPE" then
+            if GSE.isEmpty(GSEOptions.SkyRidingBinds) then GSEOptions.SkyRidingBinds = {} end
+            GSEOptions.SkyRidingBinds[tostring(slotIndex)] = nil
+            binding = L["Not Bound"]
+        else
+            local mods = ""
+            if IsControlKeyDown() then mods = "CTRL-" .. mods end
+            if IsAltKeyDown()     then mods = "ALT-"  .. mods end
+            if IsShiftKeyDown()   then mods = "SHIFT-".. mods end
+            binding = mods .. key
+            if GSE.isEmpty(GSEOptions.SkyRidingBinds) then GSEOptions.SkyRidingBinds = {} end
+            GSEOptions.SkyRidingBinds[tostring(slotIndex)] = binding
+        end
+        if GSE.UpdateVehicleBar then GSE.UpdateVehicleBar() end
+        self:SetText(binding)
+        self:SetScript("OnKeyDown", nil)
+        self:EnableKeyboard(false)
+        if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
+        -- Keep initializer data in sync so the panel shows the current
+        -- binding when re-opened. Without this the row text reverts to the
+        -- initial value supplied at register time (typically "Not Bound").
+        local init = slotInits[slotIndex]
+        if init and init.GetData then
+            local data = init:GetData()
+            if data then data.buttonText = binding end
         end
     end
 
-    PetBattleButton[4]:SetAttribute("macrotext", "/run PetBattleFrame.BottomFrame.SwitchPetButton:Click()")
-    PetBattleButton[5]:SetAttribute("macrotext", "/run PetBattleFrame.BottomFrame.CatchButton:Click()")
-    PetBattleButton[6]:SetAttribute("macrotext", "/run PetBattleFrame.BottomFrame.ForfeitButton:Click()") -- Hidden action bar to click on its buttons when the player enters a vehicle or -- skyriding mount, with the binds assigned by the user in the vehicle binds panel
-    -------------------------------------------------------------------------------------------------------
-
-    -- Vehicle/Skyriding bar
-    local VehicleBar = CreateFrame("Frame", nil, nil, "SecureHandlerAttributeTemplate")
-    VehicleBar:SetAttribute("actionpage", 1)
-    VehicleBar:Hide()
-
-    -- Creating buttons
-    local VehicleButton = {}
     for i = 1, 12 do
-        VehicleButton[i] = CreateFrame("Button", "GSE_VehicleButton" .. i, VehicleBar, "SecureActionButtonTemplate")
-        local B = VehicleButton[i]
-        B:Hide()
-        B:SetID(i)
-        B:SetAttribute("type", "action")
-        B:SetAttribute("action", i)
-        B:SetAttribute("useparent-actionpage", true)
-        B:RegisterForClicks("AnyDown")
+        local slotIndex = i
+        local layout = SettingsPanel:GetLayout(skyOptions)
+        local init = CreateSettingsButtonInitializer(
+            L["Skyriding Button"] .. " " .. i,
+            (GSEOptions.SkyRidingBinds and GSEOptions.SkyRidingBinds[tostring(i)]) or L["Not Bound"],
+            function(btnArg)
+                if not btnArg then return end
+                local btn = btnArg
+                btn.gseSlot = slotIndex
+                btn:SetText(L["Press a key..."])
+                if btn.SetPropagateKeyboardInput then btn:SetPropagateKeyboardInput(false) end
+                btn:EnableKeyboard(true)
+                btn:SetScript("OnKeyDown", onKeyDown)
+            end,
+            "",
+            false
+        )
+        slotInits[i] = init
+        layout:AddInitializer(init)
     end
 
-    -- Table that will store the keybinds for vehicles desired by the user
 
+    -- Vehicle/Skyriding/PetBattle binding handler. When the player enters a
+    -- vehicle, possess bar, override bar, Skyriding (bonusbar:5), or a pet
+    -- battle, redirect each configured key to ACTIONBUTTON<n> as a priority
+    -- override -- which beats GSE's base sequence binding and falls back to
+    -- it automatically when ClearBindings() runs on dismount/exit.
+    -- ACTIONBUTTON<n> already does the right thing for whatever bar is
+    -- currently active, so no actionpage / intermediate-button indirection
+    -- is needed.
+    local VehicleBar = CreateFrame("Frame", nil, nil, "SecureHandlerAttributeTemplate")
+    VehicleBar:Hide()
+
+    local function resolveMainBarButton(i)
+        if _G["BT4Button" .. i] then return "BT4Button" .. i end
+        if _G["DominosActionButton" .. i] then return "DominosActionButton" .. i end
+        if _G["ElvUI_Bar1Button" .. i] then return "ElvUI_Bar1Button" .. i end
+        return "ActionButton" .. i
+    end
+
+    -- Compile the user's SkyRidingBinds map into VehicleKeybind inside the
+    -- restricted environment. Called once at init and again whenever the
+    -- user changes a bind in Options.
     function GSE.UpdateVehicleBar()
         local tableval = {}
         if GSE.isEmpty(GSEOptions.SkyRidingBinds) then
@@ -416,83 +268,87 @@ if GSE.GameMode >= 11 then
             table.insert(tableval, k .. "\001" .. v)
             tablevals = true
         end
-        local executionString =
-            "VehicleKeybindTable = newtable([=======[" ..
-            string.join("]=======],[=======[", unpack(tableval)) ..
+        -- Resolve frame names for all 12 slots. Always populated, even
+        -- when the user has no binds yet, so the secure environment has
+        -- a consistent VehicleButtonName table to read from.
+        local nameTable = {}
+        for i = 1, 12 do
+            table.insert(nameTable, tostring(i) .. "\001" .. resolveMainBarButton(i))
+        end
+        local executionString
+        if tablevals then
+            executionString =
+                "VehicleKeybindTable = newtable([=======[" ..
+                string.join("]=======],[=======[", unpack(tableval)) ..
+                    "]=======])" ..
+                        [[
+                VehicleKeybind = newtable()
+                for _,v in ipairs(VehicleKeybindTable) do
+                    local x, y = strsplit("\001",v)
+                    VehicleKeybind[tonumber(x)] = y
+                end
+
+                ]]
+        else
+            executionString = "VehicleKeybind = newtable()\n"
+        end
+        executionString = executionString ..
+            "VehicleButtonNameTable = newtable([=======[" ..
+            string.join("]=======],[=======[", unpack(nameTable)) ..
                 "]=======])" ..
                     [[
-            VehicleKeybind = newtable()
-            for _,v in ipairs(VehicleKeybindTable) do
+            VehicleButtonName = newtable()
+            for _,v in ipairs(VehicleButtonNameTable) do
                 local x, y = strsplit("\001",v)
-                VehicleKeybind[tonumber(x)] = y
+                VehicleButtonName[tonumber(x)] = y
             end
-
             ]]
-        if not tablevals then
-            executionString = "VehicleKeybind = newtable()"
-        end
-        VehicleBar:Execute(executionString) -- Key: Button index / Value: Keybind
+        VehicleBar:Execute(executionString)
     end
 
     GSE.UpdateVehicleBar()
-    -- Triggers
+
+    if not IsLoggedIn() then
+        local plf = CreateFrame("Frame")
+        plf:RegisterEvent("PLAYER_LOGIN")
+        plf:SetScript("OnEvent", function(self)
+            self:UnregisterAllEvents()
+            if GSE.UpdateVehicleBar then GSE.UpdateVehicleBar() end
+        end)
+    end
+
     VehicleBar:SetAttribute(
+        -- Leading underscore matters. The secure infrastructure only fires
+        -- the underscore-prefixed snippet; the plain name is a silent no-op
+        -- (regression at a32c1c64 "Second Cut removing AceGUI Dependency",
+        -- restored 2026-06-01). Do not drop the underscore again.
         "_onattributechanged",
         [[
-  -- Actionpage update
-  if name == "page" then
-    if HasVehicleActionBar() then self:SetAttribute("actionpage", GetVehicleBarIndex())
-    elseif HasOverrideActionBar() then self:SetAttribute("actionpage", GetOverrideBarIndex())
-    elseif HasBonusActionBar() then self:SetAttribute("actionpage", GetBonusBarIndex())
-    else self:SetAttribute("actionpage", GetActionBarPage()) end
-
-  -- Settings binds of higher priority than the normal ones when the player enters a vehicle, to be able to use it
-  elseif name == "vehicletype" then
-    if value == "vehicle" then -- Vehicles/Skyriding
+  if name == "vehicletype" then
+    if value == "vehicle" then        -- Vehicles / Possess / Override / Skyriding
       for i = 1, 12 do
-        if VehicleKeybind[i] then self:SetBindingClick(true, VehicleKeybind[i], "GSE_VehicleButton"..i) end
+        if VehicleKeybind[i] and VehicleButtonName[i] then
+          self:SetBinding(true, VehicleKeybind[i], "CLICK "..VehicleButtonName[i]..":LeftButton")
+        end
       end
-
-    elseif value == "petbattle" then -- Pet battle
+    elseif value == "petbattle" then  -- Pet battle
       for i = 1, 6 do
-        if VehicleKeybind[i] then self:SetBindingClick(true, VehicleKeybind[i], "GSE_PetBattleButton"..i) end
+        if VehicleKeybind[i] and VehicleButtonName[i] then
+          self:SetBinding(true, VehicleKeybind[i], "CLICK "..VehicleButtonName[i]..":LeftButton")
+        end
       end
-
-    elseif value == "none" then -- No vehicle, deleting vehicle binds
+    elseif value == "none" then       -- Back to normal, drop our overrides
       self:ClearBindings()
     end
   end
 ]]
     )
 
-    -- Actionpage trigger
-    RegisterAttributeDriver(VehicleBar, "page", "[vehicleui] A; [possessbar] B; [overridebar] C; [bonusbar:5] D; E")
-
-    -- Vehicle trigger
     RegisterAttributeDriver(
         VehicleBar,
         "vehicletype",
-        "[vehicleui][possessbar][overridebar][bonusbar:5] vehicle;" .. "[petbattle] petbattle;" .. "none"
-    ) -- Event PET_BATTLE_OPENING_START -- Triggers when a pet battle starts. Used only in MoP because it doesn't have the [petbattle] -- macro condition to detect pet battles from the Restricted Environment like post-MoP expansions.
-    ----------------------------------------------------------------------------------------------------------------------
-
-    --[[ Events ]]
-    function GSE:PET_BATTLE_OPENING_START()
-        VehicleBar:Execute(
-            [[
-    for i = 1, 6 do
-      if VehicleKeybind[i] then self:SetBindingClick(true, VehicleKeybind[i], "GSE_PetBattleButton"..i) end
-    end
-  ]]
-        )
-    end
-
-    -- Event PET_BATTLE_CLOSE
-    -- Triggers when a pet battle starts. Used only in MoP because it doesn't have the [petbattle]
-    -- macro condition to detect pet battles from the Restricted Environment like post-MoP expansions.
-    function GSE:PET_BATTLE_CLOSE()
-        VehicleBar:Execute([[ self:ClearBindings() ]])
-    end
-    GSE:RegisterEvent("PET_BATTLE_OPENING_START")
-    GSE:RegisterEvent("PET_BATTLE_CLOSE")
+        "[vehicleui][possessbar][overridebar][bonusbar:5] vehicle; [petbattle] petbattle; none"
+    )
 end
+end
+table.insert(ns.deferred, setup)

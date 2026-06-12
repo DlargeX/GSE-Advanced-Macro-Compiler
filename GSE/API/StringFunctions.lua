@@ -1,4 +1,4 @@
-local GSE = GSE
+local _, GSE = ...
 local Statics = GSE.Static
 
 --- Remove WoW Text Markup from a sequence.  Deprecated Use GSE.UnEscapeTableRecursive
@@ -14,9 +14,18 @@ end
 
 --- Remove WoW Text Markup from a string.
 function GSE.UnEscapeString(str)
+    if type(str) ~= "string" then
+        return str
+    end
+    -- Strip doubled escapes (e.g. round-tripped through SetText) before single ones
+    str = string.gsub(str, "||[cC]%x%x%x%x%x%x%x%x", "")
+    str = string.gsub(str, "||r", "")
+    str = string.gsub(str, "|[cC]%x%x%x%x%x%x%x%x", "")
+    str = string.gsub(str, "|r", "")
     for k, v in pairs(Statics.StringFormatEscapes) do
         str = string.gsub(str, k, v)
     end
+    str = string.gsub(str, "||", "|")
     return str
 end
 
@@ -39,8 +48,112 @@ function GSE.UnEscapeTableRecursive(tab)
     return tab
 end
 
+--- Decode editor/IndentationLib colour markup back to plain text.
+function GSE.DecodeEditorText(text)
+    if type(text) ~= "string" then return text end
+    if not (text:find("|[cC]%x%x%x%x%x%x%x%x") or text:find("||[cC]%x%x%x%x%x%x%x%x") or text:find("|r", 1, true) or text:find("||r", 1, true) or text:find("||", 1, true)) then
+        return text
+    end
+
+    local function stripMarkup(value)
+        value = value:gsub("||[cC]%x%x%x%x%x%x%x%x", "")
+        value = value:gsub("||r", "")
+        value = value:gsub("|[cC]%x%x%x%x%x%x%x%x", "")
+        value = value:gsub("|r", "")
+        value = value:gsub("||", "|")
+        return value
+    end
+
+    if IndentationLib and IndentationLib.decode then
+        local ok, decoded = pcall(IndentationLib.decode, text)
+        if ok and type(decoded) == "string" then
+            text = decoded
+        else
+            text = stripMarkup(text)
+        end
+    else
+        text = stripMarkup(text)
+    end
+
+    text = stripMarkup(text)
+    if GSE.UnEscapeString then
+        local ok, decoded = pcall(GSE.UnEscapeString, text)
+        if ok and type(decoded) == "string" then text = decoded end
+    end
+    return text
+end
+
+--- Decode markup from a macro command block and repair command slashes.
+function GSE.DecodeMacroEditorText(text)
+    text = GSE.DecodeEditorText(text)
+    if type(text) ~= "string" then return text end
+    text = text:gsub("(^[ \t]*)|([%a]+)", "%1/%2")
+    text = text:gsub("(\n[ \t]*)|([%a]+)", "%1/%2")
+    return text
+end
+
+--- Count macro editor text while ignoring full Lua-style note lines.
+function GSE.GetMacroEditorTextLength(text)
+    text = GSE.DecodeMacroEditorText(text)
+    if type(text) ~= "string" or text == "" then return 0 end
+
+    local countedLines = {}
+    for line in (text .. "\n"):gmatch("(.-)\r?\n") do
+        if not line:match("^%s*%-%-") then
+            table.insert(countedLines, line)
+        end
+    end
+    return string.len(table.concat(countedLines, "\n"))
+end
+function GSE.StoreMacroEditorText(text, mode)
+    text = GSE.DecodeMacroEditorText(text)
+    if type(text) ~= "string" then return "" end
+    if string.sub(text, 1, 1) == "/" and GSE.CompileMacroText then
+        text = GSE.DecodeMacroEditorText(GSE.CompileMacroText(text, mode or Statics.TranslatorMode.ID))
+    end
+    return text
+end
+
+--- Remove leaked editor markup from imported or loaded sequence data.
+function GSE.SanitizeSequenceEditorMarkup(node, macroTextContext)
+    if type(node) ~= "table" then return false end
+    local changed = false
+    local macroTextKeys = {
+        macro = true,
+        macrotext = true,
+        text = true,
+        managedMacro = true,
+        manageMacro = true
+    }
+    local macroTextContainers = {
+        KeyPress = true,
+        KeyRelease = true
+    }
+
+    for k, v in pairs(node) do
+        if type(v) == "table" then
+            if GSE.SanitizeSequenceEditorMarkup(v, macroTextContext or macroTextContainers[k]) then
+                changed = true
+            end
+        elseif type(v) == "string" then
+            local repaired
+            if macroTextContext or macroTextKeys[k] then
+                repaired = GSE.DecodeMacroEditorText(v)
+            elseif k == "funct" then
+                repaired = GSE.DecodeEditorText(v)
+            end
+            if repaired and repaired ~= v then
+                node[k] = repaired
+                changed = true
+            end
+        end
+    end
+    return changed
+end
+
 --- Add the lines of a string as individual entries.
 function GSE.lines(tab, str)
+    if type(str) ~= "string" then str = str and tostring(str) or "" end
     local function helper(line)
         table.insert(tab, line)
         return ""
@@ -52,6 +165,10 @@ end
 function GSE.SplitMeIntoLines(str)
     --GSE.PrintDebugMessage("Entering GSTRSplitMeIntoLines with : \n" .. str, GNOME)
     local t = {}
+    if type(str) ~= "string" then
+        if str == nil then return t end
+        str = tostring(str)
+    end
     local function helper(line)
         table.insert(t, line)
         GSE.PrintDebugMessage("Line : " .. line, Statics.GSEString)
@@ -258,9 +375,16 @@ function GSE.ObjectExists(name)
     return type(GSE.FindGlobalObject(name)) ~= "nil"
 end
 
---- Get the current time as a timestamp
+--- Get the current time as a 14-digit UTC timestamp string (YYYYMMDDHHMMSS).
+-- Sourced from the WoW realm clock via GetServerTime() so timestamps written
+-- by characters in different real-world timezones remain lexicographically
+-- comparable. The "!" prefix to date() switches to gmtime; without it the
+-- format would use the player's client local time and a UTC+10 player editing
+-- at 23:00 would produce a "later" stamp than a UTC-5 player editing 5 min
+-- later at 09:00 their time, breaking server-side newer-wins resolution of
+-- multi-account upload conflicts.
 function GSE.GetTimestamp()
-    return date("%Y%m%d%H%M%S")
+    return date("!%Y%m%d%H%M%S", GetServerTime())
 end
 
 --- decode a timestamp into a table
@@ -375,11 +499,6 @@ function GSE.GUIGetColour(option)
     ) / 255
 end
 
-function GSE.GUISetColour(option, r, g, b)
-    GSE.PrintDebugMessage("Original option: " .. option, "GUI")
-    option = string.format("|c%02x%02x%02x%02x", 255, r * 255, g * 255, b * 255)
-    GSE.PrintDebugMessage("Color choice: " .. option, "GUI")
-end
 
 function GSE.GetMacroStringFormat()
     local CVarValue = C_CVar.GetCVar("ActionButtonUseKeyDown") and "DOWN" or "UP"

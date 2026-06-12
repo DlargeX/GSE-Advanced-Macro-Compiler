@@ -41,9 +41,10 @@ jobs:
 
       - name: Build Luarocks
         run: |
+          git config --global url."https://".insteadOf git://
           luarocks install mockagne 1.0
           luarocks install luaunit
-          # luarocks install luabitop
+          luarocks install luabitop
           luarocks install busted
           luarocks install luacov
           luarocks install luacov-coveralls
@@ -89,6 +90,14 @@ jobs:
         run: npm run-script pat
         env:
           DISCORD_WEBHOOK: ${{secrets.DISCORD_WEBHOOK }}
+
+      - name: Publish to GSE Tools
+        if: ${{ github.event_name != 'pull_request' }}
+        env:
+          GSE_ACTION_TOKEN: ${{ secrets.GSE_BOT_TOKEN }}
+          GSE_API_URL: ${{ secrets.GSE_API_URL || 'https://gse.tools/api' }}
+          GSE_FILE_API_URL: ${{ secrets.GSE_FILE_API_URL || 'https://api.qik.dev' }}
+        run: npm run publish-gse
 
       - name: Parse and generate documentation
         run: |

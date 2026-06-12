@@ -1,6 +1,5 @@
-local GSE = GSE
+local _, GSE = ...
 local L = GSE.L
-local GNOME, _ = ...
 
 local Statics = GSE.Static
 
@@ -9,24 +8,37 @@ function GSE.GetCurrentSpecID()
     if GSE.GameMode <= 4 then
         return GSE.GetCurrentClassID() and GSE.GetCurrentClassID()
     else
-        local currentSpec =
-            C_SpecializationInfo and C_SpecializationInfo.GetSpecialization and C_SpecializationInfo.GetSpecialization() or
-            GetSpecialization()
-        local currentSpecInfo =
-            C_SpecializationInfo and C_SpecializationInfo.GetSpecializationInfo and
-            C_SpecializationInfo.GetSpecializationInfo(currentSpec) or
-            GetSpecializationInfo(currentSpec)
-        return currentSpec and select(1, currentSpecInfo) or 0
+        local getSpec = C_SpecializationInfo and C_SpecializationInfo.GetSpecialization or GetSpecialization
+        local currentSpec = getSpec and getSpec()
+        if not currentSpec then
+            return 0
+        end
+
+        local currentSpecID
+        if C_SpecializationInfo and C_SpecializationInfo.GetSpecializationInfo then
+            currentSpecID = C_SpecializationInfo.GetSpecializationInfo(currentSpec)
+        elseif GetSpecializationInfo then
+            currentSpecID = GetSpecializationInfo(currentSpec)
+        end
+        return currentSpecID or 0
     end
 end
 
+-- WoW 12.0.5: UnitSpellHaste("player") returns a "secret number value" once combat
+-- starts while execution is tainted by an addon. The call itself succeeds but any
+-- arithmetic on the value throws. We cache the last known good haste out of combat
+-- and fall back to it when the secret-taint path trips.
+local lastKnownHaste = 0
+
 --- Return the current GCD for the current character
 function GSE.GetGCD()
-    local gcd
     local haste = UnitSpellHaste("player")
-    gcd = 1.5 / (1 + 0.01 * haste)
-
-    return gcd
+    local ok, gcd = pcall(function() return 1.5 / (1 + 0.01 * haste) end)
+    if ok then
+        lastKnownHaste = haste
+        return gcd
+    end
+    return 1.5 / (1 + 0.01 * lastKnownHaste)
 end
 
 --- Return the characters class id
@@ -42,18 +54,19 @@ function GSE.GetCurrentClassNormalisedName()
 end
 
 function GSE.GetClassIDforSpec(specid)
-    -- Check for Classic WoW
     local classid = 0
     if GSE.GameMode < 5 then
-        -- Classic WoW
-        classid = Statics.SpecIDClassList[specid]
+        -- Pre-MoP classic: no specialisations exist. GetCurrentSpecID() already
+        -- returns the class ID for these versions, so specid IS the class ID.
+        return specid or 0
     else
-        local id, name, description, icon, role, class = GetSpecializationInfoByID(specid)
+        local _, _, _, _, _, class = GetSpecializationInfoByID(specid)
         if specid <= 13 then
             classid = specid
         else
             for i = 1, 13, 1 do
-                local _, st, _ = GetClassInfo(i)
+                local classInfo = C_CreatureInfo.GetClassInfo(i)
+                local st = classInfo and classInfo.classFile
                 if class == st then
                     classid = i
                 end
@@ -81,10 +94,13 @@ function GSE.GetClassIcon(classid)
     return classicon[classid]
 end
 
+Statics.Icons.Personal = GSE.GetClassIcon(GSE.GetCurrentClassID()) or Statics.Icons.Personal
+
 --- Check if the specID provided matches the players current class
 function GSE.isSpecIDForCurrentClass(specID)
-    local _, specname, specdescription, specicon, _, specrole, specclass = GetSpecializationInfoByID(specID)
-    local currentclassDisplayName, currentenglishclass, currentclassId = UnitClass("player")
+    local _, _, _, _, _, _, specclass = GetSpecializationInfoByID(specID)
+    local _, currentenglishclass, currentclassId = UnitClass("player")
+    specclass = specclass or ""
     if specID > 15 then
         GSE.PrintDebugMessage("Checking if specID " .. specID .. " " .. specclass .. " equals " .. currentenglishclass)
     else
@@ -95,6 +111,7 @@ end
 
 function GSE.GetSpecNames()
     local keyset = {}
+    local _ = Statics.SpecIDList[0]  -- trigger lazy build before pairs() iteration
     for _, v in pairs(Statics.SpecIDList) do
         keyset[v] = v
     end
@@ -164,7 +181,6 @@ function GSE.ClearCommonKeyBinds()
     end
     local char = UnitFullName("player")
     local realm = GetRealmName()
-    GSE_C = {}
     GSE_C["KeyBindings"] = {}
     GSE_C["KeyBindings"][char .. "-" .. realm] = {}
     GSE_C["KeyBindings"][char .. "-" .. realm][tostring(GetSpecialization())] = {}
@@ -189,7 +205,10 @@ function GSE.GetResetOOC()
     if GSE.isEmpty(GSE_C) then
         GSE_C = {}
     end
-    return GSE_C.resetOOC and GSE_C.resetOOC or GSEOptions.resetOOC
+    if GSE_C.resetOOC ~= nil then
+        return GSE_C.resetOOC
+    end
+    return GSEOptions.resetOOC
 end
 
 function GSE.setActionButtonUseKeyDown()
@@ -201,7 +220,7 @@ function GSE.setActionButtonUseKeyDown()
             L[
                 "The UI has been set to KeyUp configuration.  The /click command needs to be `/click TEMPLATENAME` You will need to check your macros and adjust your click commands."
             ],
-            L["GSE"] .. " " .. L["Troubleshooting"]
+            L["Troubleshooting"]
         )
     elseif state == "DOWN" then
         C_CVar.SetCVar("ActionButtonUseKeyDown", 1)
@@ -209,7 +228,7 @@ function GSE.setActionButtonUseKeyDown()
             L[
                 "The UI has been set to KeyDown configuration.  The /click command needs to be `/click TEMPLATENAME LeftButton t` (Note the 't' here is required along with the LeftButton.)  You will need to check your macros and adjust your click commands."
             ],
-            L["GSE"] .. " " .. L["Troubleshooting"]
+            L["Troubleshooting"]
         )
     end
     GSE.ReloadSequences()
@@ -217,15 +236,19 @@ end
 
 function GSE.GetSelectedLoadoutConfigID()
     GSE.GetCurrentTalents()
+    local currentSpecID = GSE.GetCurrentSpecID()
     local lastSelected =
-        PlayerUtil.GetCurrentSpecID() and C_ClassTalents.GetLastSelectedSavedConfigID(PlayerUtil.GetCurrentSpecID())
+        currentSpecID and C_ClassTalents and C_ClassTalents.GetLastSelectedSavedConfigID and
+        C_ClassTalents.GetLastSelectedSavedConfigID(currentSpecID)
     local selectionID =
         PlayerSpellsFrame and PlayerSpellsFrame.TalentsFrame and PlayerSpellsFrame.TalentsFrame.LoadoutDropDown and
         PlayerSpellsFrame.TalentsFrame.LoadoutDropDown.GetSelectionID and
         PlayerSpellsFrame.TalentsFrame.LoadoutDropDown:GetSelectionID()
 
     -- the priority in authoritativeness is [default UI's dropdown] > [API] > ['ActiveConfigID'] > nil
-    return selectionID or lastSelected or C_ClassTalents.GetActiveConfigID() or nil -- nil happens when you don't have any spec selected, e.g. on a freshly created character
+    local activeConfigID = C_ClassTalents and C_ClassTalents.GetActiveConfigID and C_ClassTalents.GetActiveConfigID()
+    return selectionID or lastSelected or activeConfigID or nil -- nil happens when you don't have any spec selected, e.g. on a freshly created character
 end
 
-GSE.DebugProfile("CharacterFuntions")
+if type(GSE.DebugProfile) == "function" then GSE.DebugProfile("CharacterFunctions") end
+

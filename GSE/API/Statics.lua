@@ -1,4 +1,4 @@
-local GSE = GSE
+local _, GSE = ...
 local Statics = GSE.Static
 local L = GSE.L
 GSE.Library = {}
@@ -143,6 +143,7 @@ GSE.SpecIDClassList = {
     [270] = 10,
     [577] = 12,
     [581] = 12,
+    [1480] = 12,
     [1467] = 13,
     [1468] = 13,
     [1473] = 13
@@ -158,109 +159,119 @@ local function determineSpecializationName(specID)
 end
 
 local function determineClassName(specID)
-    return C_CreatureInfo.GetClassInfo(specID) and C_CreatureInfo.GetClassInfo(specID).className or nil
+    local classInfo = C_CreatureInfo.GetClassInfo(specID)
+    return classInfo and classInfo.className or nil
 end
 
 function GSE.GetClassName(classID)
     return determineClassName(classID)
 end
 
-Statics.SpecIDList = {}
+-- Spec/class name tables built lazily on first access.
+-- The 70+ WoW API calls are deferred until the editor is actually opened.
+local specListBuilt = false
 
-if GSE.GameMode <= 4 then
-    Statics.SpecIDClassList = {
-        [0] = 0,
-        [1] = 1,
-        [2] = 2,
-        [3] = 3,
-        [4] = 4,
-        [5] = 5,
-        [6] = 6,
-        [7] = 7,
-        [8] = 8,
-        [9] = 9,
-        --[10] = 10,
-        [11] = 11
-    }
-    Statics.SpecIDList = {
-        [0] = L["Global"],
-        [1] = determineClassName(1),
-        [2] = determineClassName(2),
-        [3] = determineClassName(3),
-        [4] = determineClassName(4),
-        [5] = determineClassName(5),
-        [6] = determineClassName(6),
-        [7] = determineClassName(7),
-        [8] = determineClassName(8),
-        [9] = determineClassName(9),
-        [11] = determineClassName(11)
-    }
-    if GSE.GameMode >= 3 then
-        Statics.SpecIDList[6] = determineClassName(6)
+local function buildSpecList()
+    if specListBuilt then return end
+    specListBuilt = true
+
+    if GSE.GameMode <= 4 then
+        Statics.SpecIDClassList = {
+            [0] = 0,
+            [1] = 1,
+            [2] = 2,
+            [3] = 3,
+            [4] = 4,
+            [5] = 5,
+            [6] = 6,
+            [7] = 7,
+            [8] = 8,
+            [9] = 9,
+            --[10] = 10,
+            [11] = 11
+        }
+        Statics.SpecIDList[0] = L["Global"]
+        Statics.SpecIDList[1] = determineClassName(1)
+        Statics.SpecIDList[2] = determineClassName(2)
+        Statics.SpecIDList[3] = determineClassName(3)
+        Statics.SpecIDList[4] = determineClassName(4)
+        Statics.SpecIDList[5] = determineClassName(5)
+        Statics.SpecIDList[7] = determineClassName(7)
+        Statics.SpecIDList[8] = determineClassName(8)
+        Statics.SpecIDList[9] = determineClassName(9)
+        Statics.SpecIDList[11] = determineClassName(11)
+        if GSE.GameMode >= 3 then
+            Statics.SpecIDList[6] = determineClassName(6)
+        end
+    else
+        Statics.SpecIDList[0]    = L["Global"]
+        Statics.SpecIDList[1]    = determineClassName(1)
+        Statics.SpecIDList[2]    = determineClassName(2)
+        Statics.SpecIDList[3]    = determineClassName(3)
+        Statics.SpecIDList[4]    = determineClassName(4)
+        Statics.SpecIDList[5]    = determineClassName(5)
+        Statics.SpecIDList[6]    = determineClassName(6)
+        Statics.SpecIDList[7]    = determineClassName(7)
+        Statics.SpecIDList[8]    = determineClassName(8)
+        Statics.SpecIDList[9]    = determineClassName(9)
+        Statics.SpecIDList[10]   = determineClassName(10)
+        Statics.SpecIDList[11]   = determineClassName(11)
+        Statics.SpecIDList[12]   = determineClassName(12)
+        Statics.SpecIDList[13]   = determineClassName(13)
+        Statics.SpecIDList[62]   = determineSpecializationName(62)
+        Statics.SpecIDList[63]   = determineSpecializationName(63)
+        Statics.SpecIDList[64]   = determineSpecializationName(64) .. " - " .. determineClassName(8)
+        Statics.SpecIDList[65]   = determineSpecializationName(65) .. " - " .. determineClassName(2)
+        Statics.SpecIDList[66]   = determineSpecializationName(66) .. " - " .. determineClassName(2)
+        Statics.SpecIDList[70]   = determineSpecializationName(70)
+        Statics.SpecIDList[71]   = determineSpecializationName(71)
+        Statics.SpecIDList[72]   = determineSpecializationName(72)
+        Statics.SpecIDList[73]   = determineSpecializationName(73)
+        Statics.SpecIDList[102]  = determineSpecializationName(102)
+        Statics.SpecIDList[103]  = determineSpecializationName(103)
+        Statics.SpecIDList[104]  = determineSpecializationName(104)
+        Statics.SpecIDList[105]  = determineSpecializationName(105) .. " - " .. determineClassName(11)
+        Statics.SpecIDList[250]  = determineSpecializationName(250)
+        Statics.SpecIDList[251]  = determineSpecializationName(251) .. " - " .. determineClassName(6)
+        Statics.SpecIDList[252]  = determineSpecializationName(252)
+        Statics.SpecIDList[253]  = determineSpecializationName(253)
+        Statics.SpecIDList[254]  = determineSpecializationName(254)
+        Statics.SpecIDList[255]  = determineSpecializationName(255)
+        Statics.SpecIDList[256]  = determineSpecializationName(256)
+        Statics.SpecIDList[257]  = determineSpecializationName(257) .. " - " .. determineClassName(5)
+        Statics.SpecIDList[258]  = determineSpecializationName(258)
+        Statics.SpecIDList[259]  = determineSpecializationName(259)
+        Statics.SpecIDList[260]  = determineSpecializationName(260)
+        Statics.SpecIDList[261]  = determineSpecializationName(261)
+        Statics.SpecIDList[262]  = determineSpecializationName(262)
+        Statics.SpecIDList[263]  = determineSpecializationName(263)
+        Statics.SpecIDList[264]  = determineSpecializationName(264) .. " - " .. determineClassName(7)
+        Statics.SpecIDList[265]  = determineSpecializationName(265)
+        Statics.SpecIDList[266]  = determineSpecializationName(266)
+        Statics.SpecIDList[267]  = determineSpecializationName(267)
+        Statics.SpecIDList[268]  = determineSpecializationName(268)
+        Statics.SpecIDList[269]  = determineSpecializationName(269)
+        Statics.SpecIDList[270]  = determineSpecializationName(270)
+        Statics.SpecIDList[577]  = determineSpecializationName(577)
+        Statics.SpecIDList[581]  = determineSpecializationName(581)
+        Statics.SpecIDList[1467] = determineSpecializationName(1467)
+        Statics.SpecIDList[1468] = determineSpecializationName(1468)
+        Statics.SpecIDList[1473] = determineSpecializationName(1473)
+        Statics.SpecIDList[1480] = determineSpecializationName(1480)
     end
-else
-    Statics.SpecIDList = {
-        [0] = L["Global"],
-        [1] = determineClassName(1),
-        [2] = determineClassName(2),
-        [3] = determineClassName(3),
-        [4] = determineClassName(4),
-        [5] = determineClassName(5),
-        [6] = determineClassName(6),
-        [7] = determineClassName(7),
-        [8] = determineClassName(8),
-        [9] = determineClassName(9),
-        [10] = determineClassName(10),
-        [11] = determineClassName(11),
-        [12] = determineClassName(12),
-        [13] = determineClassName(13),
-        [62] = determineSpecializationName(62),
-        [63] = determineSpecializationName(63),
-        [64] = determineSpecializationName(64) .. " - " .. determineClassName(8),
-        [65] = determineSpecializationName(65) .. " - " .. determineClassName(2),
-        [66] = determineSpecializationName(66) .. " - " .. determineClassName(2),
-        [70] = determineSpecializationName(70),
-        [71] = determineSpecializationName(71),
-        [72] = determineSpecializationName(72),
-        [73] = determineSpecializationName(73),
-        [102] = determineSpecializationName(102),
-        [103] = determineSpecializationName(103),
-        [104] = determineSpecializationName(104),
-        [105] = determineSpecializationName(105) .. " - " .. determineClassName(11),
-        [250] = determineSpecializationName(250),
-        [251] = determineSpecializationName(251) .. " - " .. determineClassName(6),
-        [252] = determineSpecializationName(252),
-        [253] = determineSpecializationName(253),
-        [254] = determineSpecializationName(254),
-        [255] = determineSpecializationName(255),
-        [256] = determineSpecializationName(256),
-        [257] = determineSpecializationName(257) .. " - " .. determineClassName(5),
-        [258] = determineSpecializationName(258),
-        [259] = determineSpecializationName(259),
-        [260] = determineSpecializationName(260),
-        [261] = determineSpecializationName(261),
-        [262] = determineSpecializationName(262),
-        [263] = determineSpecializationName(263),
-        [264] = determineSpecializationName(264) .. " - " .. determineClassName(7),
-        [265] = determineSpecializationName(265),
-        [266] = determineSpecializationName(266),
-        [267] = determineSpecializationName(267),
-        [268] = determineSpecializationName(268),
-        [269] = determineSpecializationName(269),
-        [270] = determineSpecializationName(270),
-        [577] = determineSpecializationName(577),
-        [581] = determineSpecializationName(581),
-        [1467] = determineSpecializationName(1467),
-        [1468] = determineSpecializationName(1468),
-        [1473] = determineSpecializationName(1473),
-        [1480] = determineSpecializationName(1480)
-    }
+
+    -- Build the reverse lookup once all names are known.
+    for k, v in pairs(Statics.SpecIDList) do
+        Statics.SpecIDHashList[v] = k
+    end
 end
 
-Statics.SpecIDHashList = {}
-for k, v in pairs(Statics.SpecIDList) do
-    Statics.SpecIDHashList[v] = k
-end
+-- Both tables start empty. The __index metamethod fires on any key miss,
+-- triggering buildSpecList() which populates both tables in one pass.
+-- After that, keys are present in the tables and __index is not called again.
+local lazyMeta = {__index = function(_, _) buildSpecList() end}
+Statics.SpecIDList     = setmetatable({}, lazyMeta)
+Statics.SpecIDHashList = setmetatable({}, lazyMeta)
 
 Statics.SequenceDebug = "SEQUENCEDEBUG"
 
@@ -269,20 +280,10 @@ Statics.Sequential = "Sequential"
 Statics.ReversePriority = "ReversePriority"
 Statics.Random = "Random"
 
-Statics.PrintKeyModifiers =
-    [[
-print("Right alt key " .. tostring(IsRightAltKeyDown()))
-print("Left alt key " .. tostring(IsLeftAltKeyDown()))
-print("Any alt key " .. tostring(IsAltKeyDown()))
-print("Right ctrl key " .. tostring(IsRightControlKeyDown()))
-print("Left ctrl key " .. tostring(IsLeftControlKeyDown()))
-print("Any ctrl key " .. tostring(IsControlKeyDown()))
-print("Right shft key " .. tostring(IsRightShiftKeyDown()))
-print("Left shft key " .. tostring(IsLeftShiftKeyDown()))
-print("Any shft key " .. tostring(IsShiftKeyDown()))
-print("Any mod key " .. tostring(IsModifierKeyDown()))
-print("GetMouseButtonClicked() " .. GetMouseButtonClicked() )
-]]
+-- Statics.PrintKeyModifiers (the modifier-key debug snippet injected into
+-- generated macros when GSEOptions.DebugPrintModConditionsOnKeyPress is set)
+-- is defined once, lower in this file. The earlier duplicate definition was
+-- removed for release; both copies were identical in effect.
 
 Statics.StringFormatEscapes = {
     ["|c%x%x%x%x%x%x%x%x"] = "", -- Color start
@@ -312,6 +313,7 @@ Statics.DebugModules[Statics.SourceTransmission] = Statics.SourceTransmission
 Statics.DebugModules["API"] = "API"
 Statics.DebugModules["GUI"] = "GUI"
 Statics.DebugModules["Startup"] = "Startup"
+Statics.DebugModules["Events"] = "Events"
 
 Statics.TranslationKey = "KEY"
 Statics.TranslationHash = "HASH"
@@ -426,56 +428,59 @@ Statics.Actions.Pause = "Pause"
 Statics.Actions.Embed = "Embed"
 
 Statics.ActionsIcons = {}
-Statics.ActionsIcons.Loop = "Interface\\Addons\\GSE_GUI\\Assets\\loop.png"
-Statics.ActionsIcons.If = "Interface\\Addons\\GSE_GUI\\Assets\\if.png"
-Statics.ActionsIcons.Embed = "Interface\\Addons\\GSE_GUI\\Assets\\repeat.png"
-Statics.ActionsIcons.Action = "Interface\\Addons\\GSE_GUI\\Assets\\action.png"
-Statics.ActionsIcons.Pause = "Interface\\Addons\\GSE_GUI\\Assets\\pause.png"
+Statics.ActionsIcons.Add = "Interface\\Addons\\GSE_GUI\\Assets\\add.png"
 Statics.ActionsIcons.Up = "Interface\\Addons\\GSE_GUI\\Assets\\up.png"
 Statics.ActionsIcons.Down = "Interface\\Addons\\GSE_GUI\\Assets\\down.png"
+Statics.ActionsIcons.Mouse = "Interface\\Addons\\GSE_GUI\\Assets\\drag.png"
+Statics.ActionsIcons.Action = "Interface\\Addons\\GSE_GUI\\Assets\\action.png"
+Statics.ActionsIcons.Loop = "Interface\\Addons\\GSE_GUI\\Assets\\loop.png"
+Statics.ActionsIcons.Pause = "Interface\\Addons\\GSE_GUI\\Assets\\pause.png"
+Statics.ActionsIcons.If = "Interface\\Addons\\GSE_GUI\\Assets\\if.png"
+Statics.ActionsIcons.Embed = "Interface\\Addons\\GSE_GUI\\Assets\\embed.png"
 Statics.ActionsIcons.Delete = "Interface\\Addons\\GSE_GUI\\Assets\\delete.png"
 Statics.ActionsIcons.Key = "Interface\\Addons\\GSE_GUI\\Assets\\key.png"
 Statics.ActionsIcons.Settings = "Interface\\Addons\\GSE_GUI\\Assets\\cog.png"
-Statics.ActionsIcons.Add = "Interface\\Addons\\GSE_GUI\\Assets\\add.png"
 
 Statics.Icons = {}
-Statics.Icons.Sequences = "Interface/Addons/GSE_GUI/Assets/sequences.png"
-Statics.Icons.Variables = "Interface/Addons/GSE_GUI/Assets/variables.png"
-
-Statics.Icons.Keybindings = "Interface/AddOns/GSE_GUI/Assets/key.png"
-Statics.Icons.Import = "Interface/AddOns/GSE_GUI/Assets/import.png"
-Statics.Icons.Macros = "Interface\\MacroFrame\\MacroFrame-Icon"
-Statics.Icons.Options = Statics.ActionsIcons.Settings
-Statics.Icons.Close = "Interface/AddOns/GSE_GUI/Assets/power.png"
-Statics.Icons.Logo = "Interface\\Addons\\GSE_GUI\\Assets\\GSE_512x512-Transparent.png"
+Statics.Icons.Sequences = "Interface\\Addons\\GSE_GUI\\Assets\\sequences.png"
+Statics.Icons.Keybindings = Statics.ActionsIcons.Key
+Statics.Icons.Variables = "Interface\\Addons\\GSE_GUI\\Assets\\variables.png"
+Statics.Icons.Import = "Interface\\Addons\\GSE_GUI\\Assets\\import.png"
+Statics.Icons.Macros = "Interface\\Addons\\GSE_GUI\\Assets\\macro.png"
+Statics.Icons.Options = "Interface\\Addons\\GSE_GUI\\Assets\\cog.png"
+Statics.Icons.Close = "Interface\\Addons\\GSE_GUI\\Assets\\close.png"
+Statics.Icons.Logo = "Interface\\Addons\\GSE_GUI\\Assets\\GSE-Logo.png"
 Statics.Icons.Discord = "Interface\\Addons\\GSE_GUI\\Assets\\discord.png"
 Statics.Icons.Github = "Interface\\Addons\\GSE_GUI\\Assets\\github.png"
 Statics.Icons.Patreon = "Interface\\Addons\\GSE_GUI\\Assets\\patreon.png"
-Statics.Icons.MenuLogo = "Interface/AddOns/GSE_GUI/Assets/GSE_Menu_Logo.png"
+Statics.Icons.GSEUnited = "Interface\\Addons\\GSE_GUI\\Assets\\GSEUnited.png"
+Statics.Icons.Oak = "Interface\\Addons\\GSE_GUI\\Assets\\Oak.png"
+Statics.Icons.MenuLogo = "Interface/AddOns/GSE_GUI/Assets/GSE-Menu.png"
 Statics.Icons.Export = 4419478
-Statics.Icons.Button = "Interface/AddOns/GSE_GUI/Assets/ActionORide.png"
-Statics.Icons.Account = 133784
-Statics.Icons.Personal = 236448
+Statics.Icons.Button = "Interface/AddOns/GSE_GUI/Assets/actionoride.png"
+Statics.Icons.Mouse = Statics.ActionsIcons.Mouse
+Statics.Icons.Account = "Interface\\Addons\\GSE_GUI\\Assets\\warcraft.png"
+Statics.Icons.Personal = Statics.Icons.Account
 Statics.Icons.Talents = 134327
-Statics.Icons.GSE_Logo_Dark = "Interface\\Addons\\GSE_GUI\\Assets\\GSE_Logo_Dark_512.blp"
-Statics.GSE3OnClick =
-    [=[
-local step = self:GetAttribute('step')
-step = tonumber(step)
-self:SetAttribute('macrotext', macros[step] )
-step = step % #macros + 1
-if not step or not macros[step] then -- User attempted to write a step method that doesn't work, reset to 1
-	print('|cffff0000Invalid step assigned by custom step sequence', self:GetName(), step or 'nil', '|r')
-	step = 1
-end
-self:SetAttribute('step', step)
-self:CallMethod('UpdateIcon')
-]=]
+Statics.Icons.GSE_Logo_Dark = "Interface\\Addons\\GSE_GUI\\Assets\\GSE_512x512-Transparent.png"
+-- Minimap-only icon. Separate constant so the new wrench-style logo
+-- appears on the minimap LDB button without changing the dark logo
+-- used on the other surfaces (sidebar Settings icons, action-bar
+-- watermark, tracker placeholder, sequence default). When the time
+-- comes to repoint everything to the new artwork, GSE_Logo_Dark
+-- becomes the rebrand vehicle and this can be retired.
+Statics.Icons.MinimapIcon = "Interface\\Addons\\GSE_GUI\\Assets\\GSE_Logo_Dark_512.png"
 
 Statics.TranslatorMode = {}
 Statics.TranslatorMode.Current = "CURRENT"
 Statics.TranslatorMode.String = "STRING"
 Statics.TranslatorMode.ID = "ID"
+
+-- Minimum GSEVersion that supports sequence checksums.
+-- Sequences with a GSEVersion below this threshold pre-date checksums and are
+-- shown only the "older version" warning on import.  Sequences at or above this
+-- threshold are also subject to the checksum integrity check.
+Statics.ChecksumMinVersion = 3307
 
 Statics.TableMetadataFunction = {
     __index = function(t, k)
@@ -520,19 +525,6 @@ print("Any mod key " .. tostring(IsModifierKeyDown()))
 print("GetMouseButtonClicked() " .. GetMouseButtonClicked() )
 ]]
 
-StaticPopupDialogs["GSE_ConfirmReloadUIDialog"] = {
-    text = L["You need to reload the User Interface to complete this task.  Would you like to do this now?"],
-    button1 = L["Yes"],
-    button2 = L["No"],
-    OnAccept = function()
-        ReloadUI()
-    end,
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    preferredIndex = 3 -- Avoid some UI taint, see https://www.wowace.com/news/376-how-to-avoid-some-ui-taint
-}
-
 Statics.Messages = {}
 Statics.Messages.GSE_SEQUENCE_ICON_UPDATE = "GSE_SEQUENCE_ICON_UPDATE"
 Statics.Messages.GSE_MODS_VISIBLE = "GSE_MODS_VISIBLE"
@@ -540,4 +532,218 @@ Statics.Messages.SEQUENCE_UPDATED = "GSE_SEQUENCE_UPDATED"
 Statics.Messages.VARIABLE_UPDATED = "GSE_VARIABLE_UPDATED"
 Statics.Messages.COLLECTION_IMPORTED = "GSE_COLLECTION_IMPORTED"
 
-GSE.DebugProfile("Statics")
+-- Lookup set: keys in this set are internal messages -> use RegisterMessage/UnregisterMessage
+-- All other keys in VariableEventList are WoW events → use RegisterEvent/UnregisterEvent
+Statics.InternalMessages = {
+    ["GSE_SEQUENCE_UPDATED"]     = true,
+    ["GSE_VARIABLE_UPDATED"]     = true,
+    ["GSE_COLLECTION_IMPORTED"]  = true,
+    ["GSE_SEQUENCE_ICON_UPDATE"] = true,
+    ["GSE_MODS_VISIBLE"]         = true,
+}
+
+-- Full event list for variable event callbacks.
+-- Flat key=value table for native dropdown SetList() / SetMultiselect().
+-- GSE internal messages are prefixed with "[GSE] " in the display value.
+Statics.VariableEventList = {
+    -- GSE Internal Messages
+    ["GSE_SEQUENCE_UPDATED"]              = "[GSE] GSE_SEQUENCE_UPDATED",
+    ["GSE_VARIABLE_UPDATED"]              = "[GSE] GSE_VARIABLE_UPDATED",
+    ["GSE_COLLECTION_IMPORTED"]           = "[GSE] GSE_COLLECTION_IMPORTED",
+    ["GSE_SEQUENCE_ICON_UPDATE"]          = "[GSE] GSE_SEQUENCE_ICON_UPDATE",
+    ["GSE_MODS_VISIBLE"]                  = "[GSE] GSE_MODS_VISIBLE",
+    -- ActionBar
+    ["ACTION_RANGE_CHECK_UPDATE"]         = "ACTION_RANGE_CHECK_UPDATE",
+    ["ACTIONBAR_PAGE_CHANGED"]            = "ACTIONBAR_PAGE_CHANGED",
+    ["ACTIONBAR_SLOT_CHANGED"]            = "ACTIONBAR_SLOT_CHANGED",
+    ["ACTIONBAR_UPDATE_COOLDOWN"]         = "ACTIONBAR_UPDATE_COOLDOWN",
+    ["ACTIONBAR_UPDATE_STATE"]            = "ACTIONBAR_UPDATE_STATE",
+    ["ACTIONBAR_UPDATE_USABLE"]           = "ACTIONBAR_UPDATE_USABLE",
+    ["UPDATE_BONUS_ACTIONBAR"]            = "UPDATE_BONUS_ACTIONBAR",
+    -- AddOns
+    ["ADDON_LOADED"]                      = "ADDON_LOADED",
+    -- ChallengeModeInfo
+    ["CHALLENGE_MODE_COMPLETED"]          = "CHALLENGE_MODE_COMPLETED",
+    ["CHALLENGE_MODE_RESET"]              = "CHALLENGE_MODE_RESET",
+    ["CHALLENGE_MODE_START"]              = "CHALLENGE_MODE_START",
+    -- ClassTalents
+    ["ACTIVE_COMBAT_CONFIG_CHANGED"]      = "ACTIVE_COMBAT_CONFIG_CHANGED",
+    ["SELECTED_LOADOUT_CHANGED"]          = "SELECTED_LOADOUT_CHANGED",
+    -- CombatLog
+    ["COMBAT_LOG_EVENT_UNFILTERED"]       = "COMBAT_LOG_EVENT_UNFILTERED",
+    -- CombatText
+    ["COMBAT_TEXT_UPDATE"]                = "COMBAT_TEXT_UPDATE",
+    -- CurrencySystem
+    ["CURRENCY_DISPLAY_UPDATE"]           = "CURRENCY_DISPLAY_UPDATE",
+    ["PLAYER_MONEY"]                      = "PLAYER_MONEY",
+    -- DeathInfo
+    ["PLAYER_ALIVE"]                      = "PLAYER_ALIVE",
+    ["PLAYER_DEAD"]                       = "PLAYER_DEAD",
+    ["PLAYER_UNGHOST"]                    = "PLAYER_UNGHOST",
+    ["RESURRECT_REQUEST"]                 = "RESURRECT_REQUEST",
+    -- EncounterInfo
+    ["BOSS_KILL"]                         = "BOSS_KILL",
+    ["ENCOUNTER_END"]                     = "ENCOUNTER_END",
+    ["ENCOUNTER_START"]                   = "ENCOUNTER_START",
+    ["RAID_TARGET_UPDATE"]                = "RAID_TARGET_UPDATE",
+    ["UPDATE_INSTANCE_INFO"]              = "UPDATE_INSTANCE_INFO",
+    -- EquipmentSet
+    ["EQUIPMENT_SETS_CHANGED"]            = "EQUIPMENT_SETS_CHANGED",
+    ["EQUIPMENT_SWAP_FINISHED"]           = "EQUIPMENT_SWAP_FINISHED",
+    -- FriendList
+    ["FRIENDLIST_UPDATE"]                 = "FRIENDLIST_UPDATE",
+    -- Group / Party / Raid
+    ["GROUP_ROSTER_UPDATE"]               = "GROUP_ROSTER_UPDATE",
+    ["PARTY_LEADER_CHANGED"]              = "PARTY_LEADER_CHANGED",
+    ["PARTY_MEMBERS_CHANGED"]             = "PARTY_MEMBERS_CHANGED",
+    ["RAID_ROSTER_UPDATE"]                = "RAID_ROSTER_UPDATE",
+    -- GuildInfo
+    ["GUILD_ROSTER_UPDATE"]               = "GUILD_ROSTER_UPDATE",
+    -- Item / Bag
+    ["BAG_UPDATE"]                        = "BAG_UPDATE",
+    ["BAG_UPDATE_COOLDOWN"]               = "BAG_UPDATE_COOLDOWN",
+    ["ITEM_LOCK_CHANGED"]                 = "ITEM_LOCK_CHANGED",
+    -- Map / Zone
+    ["ZONE_CHANGED"]                      = "ZONE_CHANGED",
+    ["ZONE_CHANGED_NEW_AREA"]             = "ZONE_CHANGED_NEW_AREA",
+    ["PLAYER_DIFFICULTY_CHANGED"]         = "PLAYER_DIFFICULTY_CHANGED",
+    -- Player State
+    ["PLAYER_ENTERING_WORLD"]             = "PLAYER_ENTERING_WORLD",
+    ["PLAYER_LEAVING_WORLD"]              = "PLAYER_LEAVING_WORLD",
+    ["PLAYER_LEVEL_UP"]                   = "PLAYER_LEVEL_UP",
+    ["PLAYER_LOGIN"]                      = "PLAYER_LOGIN",
+    ["PLAYER_LOGOUT"]                     = "PLAYER_LOGOUT",
+    ["PLAYER_XP_UPDATE"]                  = "PLAYER_XP_UPDATE",
+    -- Player Combat
+    ["PLAYER_REGEN_DISABLED"]             = "PLAYER_REGEN_DISABLED",
+    ["PLAYER_REGEN_ENABLED"]              = "PLAYER_REGEN_ENABLED",
+    -- Player Faction / PVP
+    ["UNIT_FACTION"]                      = "UNIT_FACTION",
+    ["PLAYER_PVP_KILLS_CHANGED"]          = "PLAYER_PVP_KILLS_CHANGED",
+    ["PLAYER_PVP_RANK_CHANGED"]           = "PLAYER_PVP_RANK_CHANGED",
+    -- Player Spec / Talents
+    ["ACTIVE_TALENT_GROUP_CHANGED"]       = "ACTIVE_TALENT_GROUP_CHANGED",
+    ["CHARACTER_POINTS_CHANGED"]          = "CHARACTER_POINTS_CHANGED",
+    ["PLAYER_PVP_TALENT_UPDATE"]          = "PLAYER_PVP_TALENT_UPDATE",
+    ["PLAYER_SPECIALIZATION_CHANGED"]     = "PLAYER_SPECIALIZATION_CHANGED",
+    ["PLAYER_TALENT_UPDATE"]              = "PLAYER_TALENT_UPDATE",
+    ["SPEC_INVOLUNTARILY_CHANGED"]        = "SPEC_INVOLUNTARILY_CHANGED",
+    ["TRAIT_CONFIG_UPDATED"]              = "TRAIT_CONFIG_UPDATED",
+    -- Spells / Cooldowns
+    ["SPELL_UPDATE_CHARGES"]              = "SPELL_UPDATE_CHARGES",
+    ["SPELL_UPDATE_COOLDOWN"]             = "SPELL_UPDATE_COOLDOWN",
+    ["SPELLS_CHANGED"]                    = "SPELLS_CHANGED",
+    ["UNIT_SPELLCAST_FAILED"]             = "UNIT_SPELLCAST_FAILED",
+    ["UNIT_SPELLCAST_INTERRUPTED"]        = "UNIT_SPELLCAST_INTERRUPTED",
+    ["UNIT_SPELLCAST_START"]              = "UNIT_SPELLCAST_START",
+    ["UNIT_SPELLCAST_STOP"]               = "UNIT_SPELLCAST_STOP",
+    ["UNIT_SPELLCAST_SUCCEEDED"]          = "UNIT_SPELLCAST_SUCCEEDED",
+    -- Target
+    ["PLAYER_TARGET_CHANGED"]             = "PLAYER_TARGET_CHANGED",
+    -- Unit
+    ["UNIT_AURA"]                         = "UNIT_AURA",
+    ["UNIT_HEALTH"]                       = "UNIT_HEALTH",
+    ["UNIT_MAXHEALTH"]                    = "UNIT_MAXHEALTH",
+    ["UNIT_POWER_UPDATE"]                 = "UNIT_POWER_UPDATE",
+    ["UNIT_DISPLAYPOWER"]                 = "UNIT_DISPLAYPOWER",
+}
+
+-- =========================================================================
+-- Tracker configuration constants
+--
+-- Centralised tunables that govern the Sequence Icon Frame / Tracker
+-- subsystem behaviour. Previously these lived as file-locals at the top
+-- of GSE_Utils/Tracker.lua, where (a) they were invisible to readers of
+-- the rest of the project and (b) they pushed Tracker.lua's chunk-level
+-- local-variable count uncomfortably close to Lua 5.1's hard 200-per-
+-- function ceiling. Moving them onto the Statics namespace solves both:
+-- one documented home, and 6 freed local slots in Tracker.lua's main
+-- chunk for future feature work.
+--
+-- Each value's purpose, with rationale where the number isn't obvious:
+--
+--   DefaultIconCount = 10
+--       How many sequence-icon slots the Tracker frame shows by default
+--       in its horizontal/vertical strip. Caps at 10 because the
+--       Tracker options panel slider also tops out at 10.
+--
+--   KeyHistoryLimit = 1
+--       How many recent activation keys to retain for diagnostic
+--       display. Set to 1 because GSE only shows the most recent
+--       key in the "Activation Key:" Tracker text line.
+--
+--   MirrorIconGap = 8
+--       Horizontal pixel gap between the Sequence Icon Frame and its
+--       Successful Cast mirror panel when both are shown linked
+--       (current sequence icon + the mirrored "you just cast" icon).
+--
+--   SuccessCastWindow = 1.5
+--       Window in seconds after a GSE activity event (sequence step
+--       advance) during which a successful spell cast can be
+--       attributed to the same sequence. Past this window the
+--       successful-cast indicator does not light up even if a cast
+--       lands -- protects against unrelated cast events crediting GSE.
+--
+--   DefaultGCDGraceWindow = 1.5
+--       Seconds added to the calculated GCD when deciding whether the
+--       sequence step's spell is "still on cooldown" for icon display
+--       purposes. Matches SuccessCastWindow by design -- both are
+--       grace periods of the same order.
+--
+--   ActiveSpamKeyHoldSeconds = 0.45
+--       How long the active spam-key indicator (the "yellow flash"
+--       that shows your binding key while you are mashing it) stays
+--       visible after the most recent press. Below this, brief taps
+--       wouldn't register; above, the indicator lingers awkwardly.
+-- =========================================================================
+Statics.TrackerConfig = {
+    DefaultIconCount         = 10,
+    KeyHistoryLimit          = 1,
+    MirrorIconGap            = 8,
+    SuccessCastWindow        = 1.5,
+    DefaultGCDGraceWindow    = 1.5,
+    ActiveSpamKeyHoldSeconds = 0.45,
+    -- Single source of truth for the tracker's "show the sequence name"
+    -- default. Previously this literal `true` was duplicated in five
+    -- places (Tracker.lua's X/Y layout presets + EnsureSequenceIconFrameOptions,
+    -- and Options.lua's EnsureSequenceIconFrameOptions + ResetTrackerToDefaultLayout).
+    -- All five now read this constant so the default can never drift.
+    DefaultShowSequenceName  = true,
+}
+
+-- =========================================================================
+-- Centralised "is this icon a placeholder?" predicate.
+--
+-- Returns true if `icon` is one of GSE's fallback / placeholder icons --
+-- the empty / nil cases, the Blizzard question-mark icon (in either
+-- string-path or numeric file-data-ID form), or any of GSE's own brand
+-- logos that get used as "no real icon yet" markers. Anything else --
+-- a real spell icon, a real macro icon, a user-picked custom icon --
+-- returns false.
+--
+-- Centralised here so that the four call sites (actionIconIsFallback in
+-- Storage.lua's GetCurrentButtonIconInfo, isGSEFallbackTexture in
+-- Events.lua, IsFallbackIcon in Tracker.lua, isManagedMacroFallbackIcon
+-- in Storage.lua) all share one definition. Previously these four were
+-- maintained independently and drifted -- the Events.lua copy notably
+-- was missing the Statics.QuestionMark string check that the other
+-- three had. Routing all four through this single helper closes that
+-- gap and means future additions (e.g. macro.png, new logo files) only
+-- need to be considered in one place.
+--
+-- Note: GSE.isEmpty is defined in Init.lua, which loads strictly before
+-- Statics.lua per GSE.toc -- safe to call here at runtime. We only
+-- read Statics.* fields at call time, so no chicken-and-egg with the
+-- Statics namespace itself.
+-- =========================================================================
+function GSE.IsFallbackIcon(icon)
+    return GSE.isEmpty(icon)
+        or icon == Statics.QuestionMark
+        or icon == Statics.QuestionMarkIconID
+        or icon == Statics.Icons.GSE_Logo_Dark
+        or icon == Statics.Icons.Logo
+        or icon == Statics.Icons.MenuLogo
+end
+
+if type(GSE.DebugProfile) == "function" then GSE.DebugProfile("Statics") end
+

@@ -1,11 +1,11 @@
-## Interface: 11508, 20505, 50503, 120001
+## Interface: 11508, 20505, 50503, 50504, 120005, 120007
 
 ## Title: |cFFFFFFFFGS|r|cFF00FFFFE|r |cFF808080Quality of Life Updates|r
 ## Notes: GSE Quality of Life
 ## Author: TimothyLuke
 ## Version: @project-version@
 ## Dependencies: GSE_Utils GSE_Options
-## IconTexture: Interface\Addons\GSE_GUI\Assets\GSE_Logo_Dark_512
+## IconTexture: Interface\Addons\GSE_GUI\Assets\GSE_512x512-Transparent.png
 ## Category-enUS: Combat
 ## Category-deDE: Kampf
 ## Category-esES: Combate
@@ -19,5 +19,8 @@
 ## Category-zhTW: 戰鬥
 ## Group: GSE
 
+
+# Bootstrap exposes _G.GSE_QoL_Initialize that main GSE calls on ADDON_LOADED.
+Bootstrap.lua
 
 QoL.lua

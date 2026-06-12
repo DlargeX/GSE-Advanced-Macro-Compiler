@@ -1,10 +1,50 @@
 ---@diagnostic disable: undefined-global, lowercase-global, duplicate-set-field
+
+-- WoW chat-slash globals. Real WoW exposes SlashCmdList + SLASH_<NAME>1 as
+-- the canonical slash-command registration surface; Utils.lua registers
+-- /gse this way at module scope. Provide a writable stub so loading
+-- Utils.lua in busted doesn't crash on `SlashCmdList.GSE = function ... end`.
+SlashCmdList = SlashCmdList or {}
+
 GSE = {}
 GSE.L = {}
 GSE.Static = {}
 GSE.VersionString = "2.0.00-18-g95ecb41"
+-- Production source files use `local _, GSE = ...` (main GSE) or
+-- `local _, ns = ...; ns.GSE` (submodules). Both want the GSE table as
+-- the second positional from WoW's addon load tuple. Self-reference lets
+-- the require-override below pass `GSE` as both `ns` (so submodule code's
+-- `ns.GSE` resolves) and as `GSE` (so main-GSE code captures it directly).
+GSE.GSE = GSE
 
 GNOME = "UnitTest"
+
+-- Source files moved from `local GSE = GSE` (global lookup) to
+-- `local _, GSE = ...` (private addon namespace). Under busted, require()
+-- passes (modname, loaderdata-string) as ..., so the second positional is
+-- a string, not our mock GSE table. Intercept requires for repo-relative
+-- GSE/ paths and call the chunk with our mock GSE as the namespace.
+-- Submodule files also push a deferred setup() into ns.deferred; we run
+-- (and drain) it immediately so tests see the bodies as executed.
+local origRequire = require
+local loaded = {}
+function require(modname)
+    if type(modname) == "string" and (modname:match("^%.%./GSE/") or modname:match("^%.%./GSE_")) then
+        if loaded[modname] ~= nil then return loaded[modname] end
+        local path = modname:gsub("^%.%./", "") .. ".lua"
+        local chunk, err = loadfile(path)
+        if not chunk then error(err, 2) end
+        local result = chunk("GSE_TEST", GSE)
+        if GSE.deferred then
+            local pending = GSE.deferred
+            GSE.deferred = nil
+            for _, fn in ipairs(pending) do fn() end
+        end
+        loaded[modname] = result == nil and true or result
+        return loaded[modname]
+    end
+    return origRequire(modname)
+end
 
 GSELibrary = {}
 GSEStorage = {}
@@ -223,6 +263,14 @@ function debugprofilestop()
   return os.clock()
 end
 
+--- Lazy-load stub: in tests GSE.Library is populated directly, nothing to decompress.
+function GSE.EnsureClassLoaded(classid)
+end
+
+--- Lazy-load stub: in tests GSE.Library is populated directly, nothing to decompress.
+function GSE.EnsureSequenceLoaded(classid, sequenceName)
+end
+
 function GSE.DebugProfile(event)
   local currentTimeStop = debugprofilestop()
   if GSE.ProfileStop and GSE.Developer then
@@ -239,3 +287,18 @@ function C_CreatureInfo.GetClassInfo()
     classID = 11
   }
 end
+
+-- IndentationLib is a WoW syntax-highlighting addon required at module level by
+-- GSE_Utils/Utils.lua.  The mock provides the minimum structure needed to load.
+IndentationLib = {
+  tokens = {
+    TOKEN_SPECIAL       = "special",
+    TOKEN_KEYWORD       = "keyword",
+    TOKEN_UNKNOWN       = "unknown",
+    TOKEN_COMMENT_SHORT = "comment_short",
+    TOKEN_COMMENT_LONG  = "comment_long",
+    TOKEN_STRING        = "string",
+    TOKEN_NUMBER        = "number",
+  },
+  encode = function(text) return text end,
+}

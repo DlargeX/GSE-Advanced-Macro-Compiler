@@ -1,12 +1,8 @@
--- GLOBALS: GSE
-GSE =
-    LibStub("AceAddon-3.0"):NewAddon(
-    "GSE",
-    "AceConsole-3.0",
-    "AceEvent-3.0",
-    "AceComm-3.0",
-    "AceTimer-3.0"
-)
+local _, GSE = ...
+
+LibStub("AceEvent-3.0"):Embed(GSE)
+LibStub("AceComm-3.0"):Embed(GSE)
+
 GSE.L = LibStub("AceLocale-3.0"):GetLocale("GSE")
 GSE.Static = {}
 
@@ -27,6 +23,7 @@ end
 GSE.MediaPath = "Interface\\Addons\\GSE\\Media"
 GSE.Pause = {}
 GSE.OutputQueue = {}
+GSE.IncomingQueue = {}
 GSE.DebugOutput = ""
 GSE.SequenceDebugOutput = ""
 GSE.GUI = {}
@@ -39,7 +36,7 @@ local Statics = GSE.Static
 local GNOME = "|cFFFFFFFFGS|r|cFF00FFFFE|r"
 
 -- Initialisation Functions
---- Checks for nil or empty variables.
+--- Checks for nil or empty string.
 function GSE.isEmpty(s)
     return s == nil or s == ""
 end
@@ -91,7 +88,7 @@ GSE.VersionNumber = GSE.ParseVersion(GSE.VersionString)
 --    This method prints the print queue.
 function GSE.PerformPrint()
     for k, v in ipairs(GSE.OutputQueue) do
-        print(v)
+        print(GNOME .. ": " ..v)
         GSE.OutputQueue[k] = nil
     end
 end
@@ -116,13 +113,25 @@ end
 --    be sent to variable <code>GSE.Print</code>
 --    The Title is stripped for intermod debug output via GSE.DebugOutput
 local function determinationOutputDestination(message, title)
+    local wroteDebugOutput = false
     if GSE.UnsavedOptions.DebugSequenceExecution then
         GSE.DebugOutput = GSE.DebugOutput .. message .. "\n"
+        wroteDebugOutput = true
     elseif GSEOptions.sendDebugOutputToDebugOutput then
         GSE.DebugOutput = GSE.DebugOutput .. message .. "\n"
+        wroteDebugOutput = true
     end
     if GSEOptions.sendDebugOutputToChatWindow then
         GSE.Print(message, title)
+    end
+    if
+        wroteDebugOutput and type(GSE.GUIUpdateOutput) == "function" and GSE.GUIDebugFrame and
+            type(GSE.GUIDebugIsOpenOrMinimized) == "function" and GSE.GUIDebugIsOpenOrMinimized() and not GSE.GUIDebugPaused and
+            not GSE.DebugOutputFlushing
+     then
+        GSE.DebugOutputFlushing = true
+        pcall(GSE.GUIUpdateOutput)
+        GSE.DebugOutputFlushing = nil
     end
 end
 
@@ -175,3 +184,47 @@ GSE.inParty = false
 
 -- initialise debugprofilestart
 GSE.DebugProfile("init")
+
+-- ---------------------------------------------------------------------------
+-- Submodule init dispatch
+--
+-- Submodules (GSE_Utils, GSE_Options, GSE_GUI, GSE_LDB, GSE_QoL) cannot reach
+-- this addon's private namespace at parse-time. Each one exposes a single
+-- global `<name>_Initialize` function that takes the GSE table and runs the
+-- submodule's deferred setup. Reinit guards live inside each submodule.
+-- ---------------------------------------------------------------------------
+local SUBMODULES = {
+    GSE_Utils = true,
+    GSE_Options = true,
+    GSE_GUI = true,
+    GSE_LDB = true,
+    GSE_QoL = true,
+    GSE_Companion = true,
+}
+
+local function pushGSEInto(addon)
+    if not SUBMODULES[addon] then return end
+    local initFn = _G[addon .. "_Initialize"]
+    if type(initFn) == "function" then
+        initFn(GSE)
+    end
+end
+
+-- If a submodule somehow loaded before main GSE (TOC dependencies should
+-- prevent this, but cover the case anyway), push GSE into it now.
+for name in pairs(SUBMODULES) do
+    if C_AddOns.IsAddOnLoaded(name) then
+        pushGSEInto(name)
+    end
+end
+
+-- Catch submodules that load after us. AceEvent dispatches as
+-- `self:method(eventname, ...payload)`, so the loaded addon name is the
+-- second positional, not the first. Define the method BEFORE registering:
+-- AceEvent (via CallbackHandler) checks that self[method] is callable at
+-- registration time and errors if the slot is still nil.
+function GSE:ADDON_LOADED(_, addon)
+    if not SUBMODULES[addon] then return end
+    pushGSEInto(addon)
+end
+GSE:RegisterEvent("ADDON_LOADED")

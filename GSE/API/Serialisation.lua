@@ -1,4 +1,4 @@
-local GSE = GSE
+local _, GSE = ...
 local L = GSE.L
 local Statics = GSE.Static
 
@@ -32,6 +32,18 @@ function GSE.TransmitSequence(key, channel, target, transmissionFrame)
     GSE.PrintDebugMessage("Sending Seqence [" .. classid .. "][" .. SequenceName .. "]", Statics.SourceTransmission)
     t.ClassID = classid
     t.SequenceName = SequenceName
+    GSE.EnsureSequenceLoaded(classid, SequenceName)
+    local txGuardSeq = GSE.Library[classid] and GSE.Library[classid][SequenceName]
+    if txGuardSeq and txGuardSeq.MetaData and txGuardSeq.MetaData.noExport then
+        GSE.Print(
+            string.format(L["'%s' cannot be shared — it is protected content."], SequenceName),
+            "Error"
+        )
+        if transmissionFrame then
+            transmissionFrame:SetStatusText(L["Cannot share protected content"])
+        end
+        return
+    end
     t.Sequence = GSE.Library[classid][SequenceName]
     GSE.sendMessage(t, channel, target)
     if transmissionFrame then
@@ -40,7 +52,6 @@ function GSE.TransmitSequence(key, channel, target, transmissionFrame)
 end
 
 function GSE.sendMessage(tab, channel, target, priority)
-    local _, instanceType = IsInInstance()
     GSE.PrintDebugMessage(tab.Command, Statics.SourceTransmission)
     if tab.Command == "GS-E_TRANSMITSEQUENCE" then
         GSE.PrintDebugMessage(tab.SequenceName, Statics.SourceTransmission)
@@ -74,7 +85,6 @@ end
 
 function GSE.performVersionCheck(version)
     if string.match(GSE.VersionString, "development") then
-        local developer = true
         GSE.old = false
     else
         if GSE.ParseVersion(version) ~= nil and GSE.ParseVersion(version) > GSE.VersionNumber then
@@ -87,7 +97,7 @@ function GSE.performVersionCheck(version)
                 )
                 GSE.old = true
                 if (GSE.ParseVersion(version) - GSE.VersionNumber >= 5) then
-                    StaticPopup_Show("GSE_UPDATE_AVAILABLE")
+                    GSE.GUICall("GUIShowUpdateAvailable")
                 end
             end
         end
@@ -110,6 +120,7 @@ function GSE.SendSequenceMeta(ClassID, SequenceName, gseuser, channel)
     t.Command = "GSE_SEQUENCEMETA"
     t.ClassID = ClassID
     t.SequenceName = SequenceName
+    GSE.EnsureSequenceLoaded(ClassID, SequenceName)
     t.LastUpdated = GSE.Library[ClassID][SequenceName].MetaData.LastUpdated
     t.Help = GSE.Library[ClassID][SequenceName].MetaData.Help
     GSE.sendMessage(t, channel, gseuser)
@@ -157,7 +168,6 @@ function GSE.storeSender(sender, senderversion)
 end
 
 function GSE.sendVersionCheck()
-    local _, instanceType = IsInInstance()
     local t = {}
     t.Command = "GS-E_VERSIONCHK"
     t.Version = GSE.VersionString
@@ -226,8 +236,13 @@ function GSE:OnCommReceived(prefix, message, channel, sender)
             end
         elseif t.Command == "GSE_REQUESTSEQUENCE" then
             if sender ~= GetUnitName("player", true) then
-                if not GSE.isEmpty(GSESequences[tonumber(t.ClassID)][t.SequenceName]) then
-                    GSE.SendSequence(tonumber(t.ClassID), t.SequenceName, sender, "WHISPER")
+                local reqClassId = tonumber(t.ClassID)
+                local reqSeq = GSE.Library[reqClassId] and GSE.Library[reqClassId][t.SequenceName]
+                if reqSeq and reqSeq.MetaData and reqSeq.MetaData.noExport then
+                    return  -- silent refusal; requester's UI just times out
+                end
+                if not GSE.isEmpty(GSESequences[reqClassId][t.SequenceName]) then
+                    GSE.SendSequence(reqClassId, t.SequenceName, sender, "WHISPER")
                 end
             else
                 GSE.PrintDebugMessage("Ignoring RequestSequence from me.", Statics.SourceTransmission)
@@ -258,7 +273,7 @@ function GSE:OnCommReceived(prefix, message, channel, sender)
                         ["enUS"] = {}
                     }
                 end
-                if not GSE.isEmpty(t.cache) and #t.cache > 0 then
+                if not GSE.isEmpty(t.cache) and next(t.cache) ~= nil then
                     for locale, spells in pairs(t.cache) do
                         GSE.PrintDebugMessage("processing Locale" .. locale, Statics.SourceTransmission)
                         for k, v in pairs(spells) do
@@ -280,7 +295,7 @@ end
 
 function GSE.SequenceChatPattern(sequenceName, classID)
     local playerName = UnitName("player")
-    return "[GSE: " .. playerName .. " - " .. sequenceName .. " - " .. classID .. "]"
+    return "[GSE: " .. (playerName or "?") .. " - " .. (sequenceName or "?") .. " - " .. (classID or "0") .. "]"
 end
 
 function GSE.CreateSequenceLink(sequenceName, classID, playerName)
@@ -374,19 +389,15 @@ hooksecurefunc(
     function(link)
         local linkType, addon, param1 = string.split(":", link)
         if linkType == "garrmission" and addon == "GSE" then
-            if param1 == "foo" then
-                print("Processed test link foo")
-            else
-                local cmd, sequenceName, player, ClassID = string.split("@", param1)
-                if cmd == "seq" then
-                    if player == UnitName("player") then
-                        local editor = GSE.CreateEditor()
-                        editor.ManageTree()
-                        GSE.GUILoadEditor(editor, ClassID .. "," .. sequenceName)
-                    else
-                        GSE.Print("Requested " .. sequenceName .. " from " .. player, Statics.SourceTransmission)
-                        GSE.RequestSequence(ClassID, sequenceName, player, "WHISPER")
-                    end
+            local cmd, sequenceName, player, ClassID = string.split("@", param1)
+            if cmd == "seq" then
+                if player == UnitName("player") then
+                    local editor = GSE.CreateEditor()
+                    editor.ManageTree()
+                    GSE.GUILoadEditor(editor, ClassID .. "," .. sequenceName)
+                else
+                    GSE.Print("Requested " .. sequenceName .. " from " .. player, Statics.SourceTransmission)
+                    GSE.RequestSequence(ClassID, sequenceName, player, "WHISPER")
                 end
             end
         end
@@ -394,4 +405,5 @@ hooksecurefunc(
 )
 
 GSE:RegisterComm("GSE")
-GSE.DebugProfile("Serialisation")
+
+if type(GSE.DebugProfile) == "function" then GSE.DebugProfile("Serialisation") end

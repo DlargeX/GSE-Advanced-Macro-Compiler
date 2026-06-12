@@ -1,9 +1,12 @@
-local GSE = GSE
+local _, ns = ...
+ns.deferred = ns.deferred or {}
 
-local AceGUI = LibStub("AceGUI-3.0")
+local function setup()
+local GSE = ns.GSE
+local UI = GSE.UI
 local L = GSE.L
 
-local recordframe = AceGUI:Create("Frame")
+local recordframe = UI:Create("Frame")
 recordframe:Hide()
 recordframe.frame:SetFrameStrata("MEDIUM")
 recordframe.frame:SetClampedToScreen(true)
@@ -22,7 +25,7 @@ recordframe:SetCallback(
 )
 recordframe:SetLayout("List")
 
-local recordsequencebox = AceGUI:Create("MultiLineEditBox")
+local recordsequencebox = UI:Create("MultiLineEditBox")
 recordsequencebox:SetLabel(L["Actions"])
 recordsequencebox:SetNumLines(20)
 recordsequencebox:DisableButton(true)
@@ -30,10 +33,10 @@ recordsequencebox:SetFullWidth(true)
 recordframe:AddChild(recordsequencebox)
 GSE.GUIRecordFrame.RecordSequenceBox = recordsequencebox
 
-local recButtonGroup = AceGUI:Create("SimpleGroup")
+local recButtonGroup = UI:Create("SimpleGroup")
 recButtonGroup:SetLayout("Flow")
 
-local recbutton = AceGUI:Create("Button")
+local recbutton = UI:Create("Button")
 recbutton:SetText(L["Record"])
 recbutton:SetWidth(150)
 recbutton:SetCallback(
@@ -44,7 +47,7 @@ recbutton:SetCallback(
 )
 recButtonGroup:AddChild(recbutton)
 
-local createmacrobutton = AceGUI:Create("Button")
+local createmacrobutton = UI:Create("Button")
 createmacrobutton:SetText(L["Create Macro"])
 createmacrobutton:SetWidth(150)
 createmacrobutton:SetCallback(
@@ -72,3 +75,9 @@ function GSE.GUIManageRecord()
   end
   recbutton:SetText(recbuttontext)
 end
+
+if recordframe and recordframe.frame and GSE.RegisterUIScaleFrame then
+    GSE.RegisterUIScaleFrame(recordframe.frame)
+end
+end
+table.insert(ns.deferred, setup)

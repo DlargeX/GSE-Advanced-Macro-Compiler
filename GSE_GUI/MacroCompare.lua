@@ -1,11 +1,20 @@
-local GSE = GSE
-local Statics = GSE.Static
+local _, ns = ...
+ns.deferred = ns.deferred or {}
 
-local AceGUI = LibStub("AceGUI-3.0")
+local function setup()
+local GSE = ns.GSE
+local Statics = GSE.Static
+local UI = GSE.UI
 local L = GSE.L
 
+local function DisableCompareColoring(widget)
+  if widget and widget.editBox and IndentationLib and IndentationLib.disable then
+    IndentationLib.disable(widget.editBox)
+  end
+end
+
 function GSE.GUIShowCompareWindow(sequenceName, classid, newsequence)
-  local compareframe = AceGUI:Create("Frame")
+  local compareframe = UI:Create("Frame")
   compareframe:Hide()
   if GSE.isEmpty(GSEOptions.DefaultImportAction) then
     GSEOptions.DefaultImportAction = "MERGE"
@@ -19,19 +28,21 @@ function GSE.GUIShowCompareWindow(sequenceName, classid, newsequence)
   compareframe:SetCallback(
     "OnClose",
     function(self)
+      DisableCompareColoring(compareframe.OrigText)
+      DisableCompareColoring(compareframe.NewText)
       compareframe:Hide()
       GSE.ShowSequences()
-      AceGUI:Release(self)
+      UI:Release(self)
     end
   )
 
   compareframe:SetLayout("List")
 
-  local headerGroup = AceGUI:Create("SimpleGroup")
+  local headerGroup = UI:Create("SimpleGroup")
   headerGroup:SetFullWidth(true)
   headerGroup:SetLayout("Flow")
 
-  local leftColumn = AceGUI:Create("MultiLineEditBox")
+  local leftColumn = UI:Create("MultiLineEditBox")
   compareframe.OrigText = leftColumn
   leftColumn:SetRelativeWidth(0.5)
   leftColumn:SetFullHeight(true)
@@ -39,8 +50,9 @@ function GSE.GUIShowCompareWindow(sequenceName, classid, newsequence)
   leftColumn:DisableButton(true)
   leftColumn:SetLabel(L["Local Macro"])
   IndentationLib.enable(leftColumn.editBox, Statics.IndentationColorTable, 4)
+  leftColumn:SetCallback("OnRelease", DisableCompareColoring)
 
-  local rightColumn = AceGUI:Create("MultiLineEditBox")
+  local rightColumn = UI:Create("MultiLineEditBox")
   compareframe.NewText = rightColumn
   rightColumn:SetRelativeWidth(0.5)
   rightColumn:SetFullHeight(true)
@@ -48,23 +60,24 @@ function GSE.GUIShowCompareWindow(sequenceName, classid, newsequence)
   rightColumn:DisableButton(true)
   rightColumn:SetLabel(L["Updated Macro"])
   IndentationLib.enable(rightColumn.editBox, Statics.IndentationColorTable, 4)
+  rightColumn:SetCallback("OnRelease", DisableCompareColoring)
 
   headerGroup:AddChild(leftColumn)
   headerGroup:AddChild(rightColumn)
 
   compareframe:AddChild(headerGroup)
 
-  local actionButtonGroup = AceGUI:Create("SimpleGroup")
+  local actionButtonGroup = UI:Create("SimpleGroup")
   actionButtonGroup:SetWidth(602)
   actionButtonGroup:SetLayout("Flow")
   actionButtonGroup:SetHeight(15)
 
-  local actionLabel = AceGUI:Create("Label")
+  local actionLabel = UI:Create("Label")
   actionLabel:SetText(L["Choose import action:"] .. "   ")
 
   actionButtonGroup:AddChild(actionLabel)
 
-  local actionChoiceRadio = AceGUI:Create("Dropdown")
+  local actionChoiceRadio = UI:Create("Dropdown")
   actionChoiceRadio:SetList(
     {
       ["MERGE"] = L["Merge"],
@@ -77,7 +90,7 @@ function GSE.GUIShowCompareWindow(sequenceName, classid, newsequence)
 
   actionButtonGroup:AddChild(actionChoiceRadio)
 
-  local nameeditbox = AceGUI:Create("EditBox")
+  local nameeditbox = UI:Create("EditBox")
 
   actionChoiceRadio:SetCallback(
     "OnValueChanged",
@@ -107,12 +120,14 @@ function GSE.GUIShowCompareWindow(sequenceName, classid, newsequence)
 
   actionButtonGroup:AddChild(nameeditbox)
 
-  local actionbutton = AceGUI:Create("Button")
+  local actionbutton = UI:Create("Button")
   actionbutton:SetText(L["Continue"])
   actionbutton:SetWidth(150)
   actionbutton:SetCallback(
     "OnClick",
     function()
+      DisableCompareColoring(compareframe.OrigText)
+      DisableCompareColoring(compareframe.NewText)
       compareframe:Hide()
       GSE.PerformMergeAction(
         compareframe.ChosenAction,
@@ -128,6 +143,7 @@ function GSE.GUIShowCompareWindow(sequenceName, classid, newsequence)
 
   compareframe.NewSequence = newsequence
 
+  GSE.EnsureSequenceLoaded(classid, sequenceName)
   if newsequence.MetaData.DisableEditor or GSE.Library[classid][sequenceName].MetaData.DisableEditor then
     GSE.PerformMergeAction("REPLACE", classid, sequenceName, newsequence)
   else
@@ -142,7 +158,9 @@ function GSE.GUIShowCompareWindow(sequenceName, classid, newsequence)
     compareframe.OrigText:SetText(GSE.ExportSequence(GSE.Library[classid][sequenceName], sequenceName, true))
     compareframe.NewText:SetText(GSE.ExportSequence(newsequence, sequenceName, true))
     compareframe:Show()
-    compareframe.classid = classid
+    if compareframe.frame and GSE.RegisterUIScaleFrame then GSE.RegisterUIScaleFrame(compareframe.frame) end
     compareframe.sequenceName = sequenceName
   end
 end
+end
+table.insert(ns.deferred, setup)

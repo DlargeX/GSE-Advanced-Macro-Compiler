@@ -1,9 +1,118 @@
-local GSE = GSE
+local _, GSE = ...
 local Statics = GSE.Static
 
 local GNOME = Statics.DebugModules["Translator"]
 
-local L = GSE.L
+
+local function normaliseSpellIDValue(value)
+    if type(value) == "table" then
+        value = value.spellID or value.id
+    end
+    return tonumber(value) or value
+end
+
+local function findBaseSpellID(spellID)
+    spellID = normaliseSpellIDValue(spellID)
+    if not spellID then return nil end
+
+    local FindBaseSpellByID = (C_SpellBook and C_SpellBook.FindBaseSpellByID) or FindBaseSpellByID
+    if FindBaseSpellByID then
+        local ok, baseSpell = pcall(FindBaseSpellByID, spellID)
+        baseSpell = ok and normaliseSpellIDValue(baseSpell) or nil
+        if baseSpell and baseSpell ~= 0 then
+            return baseSpell
+        end
+    end
+
+    if not GSE.isEmpty(Statics.BaseSpellTable[spellID]) then
+        return Statics.BaseSpellTable[spellID]
+    end
+
+    return spellID
+end
+
+local function findCurrentSpellID(spellID)
+    spellID = normaliseSpellIDValue(spellID)
+    if not spellID then return nil end
+
+    local FindSpellOverrideByID = (C_SpellBook and C_SpellBook.FindSpellOverrideByID) or FindSpellOverrideByID
+    if FindSpellOverrideByID then
+        local ok, currentSpell = pcall(FindSpellOverrideByID, spellID)
+        currentSpell = ok and normaliseSpellIDValue(currentSpell) or nil
+        if currentSpell and currentSpell ~= 0 then
+            return currentSpell
+        end
+    end
+
+    return spellID
+end
+
+local function getSpellInfoID(spell)
+    if GSE.isEmpty(spell) then
+        return nil
+    end
+
+    local spellinfo = GSE.GetSpellInfo(spell)
+    if spellinfo then
+        return normaliseSpellIDValue(spellinfo.spellID)
+    end
+end
+
+local function spellIDIsInSpellBook(spellID)
+    -- TBC Classic Anniversary + MoP Classic expose C_SpellBook but not
+    -- FindSpellBookSlotForSpell (Retail-only). The unguarded call there
+    -- threw `attempt to call a nil value` every CompileMacroText pass —
+    -- ~179 spam errors per Notes save in issue #1925. Mirror the
+    -- defensive pattern used by findBaseSpellID / findCurrentSpellID
+    -- above: prefer C_SpellBook.X, fall back to the legacy top-level
+    -- global, and default to true ("treat as in book") when neither
+    -- exists. That matches the nil-slot path on Retail, where an
+    -- unresolved slot is also reported as in-book by this function.
+    local FindSlot = (C_SpellBook and C_SpellBook.FindSpellBookSlotForSpell)
+        or FindSpellBookSlotForSpell
+    if not FindSlot then
+        return true
+    end
+    local slot = FindSlot(spellID)
+    return slot == nil or slot > 0
+end
+
+local function canCacheSpellLookup(spellstring, spellID, rawSpellID)
+    if tonumber(spellstring) ~= nil or GSE.isEmpty(spellID) then
+        return false
+    end
+
+    if rawSpellID and rawSpellID ~= spellID then
+        return true
+    end
+
+    return spellIDIsInSpellBook(spellID)
+end
+
+function GSE.GetBaseSpellID(spell)
+    local spellID = tonumber(spell) or getSpellInfoID(spell)
+    return findBaseSpellID(spellID)
+end
+
+function GSE.GetCurrentSpellID(spell)
+    local baseSpell = GSE.GetBaseSpellID(spell)
+    return findCurrentSpellID(baseSpell)
+end
+
+function GSE.SanitizeSpellCache()
+    if GSE.isEmpty(GSESpellCache) then return end
+
+    for _, cache in pairs(GSESpellCache) do
+        if type(cache) == "table" then
+            for spellName, spellID in pairs(cache) do
+                local baseSpell = findBaseSpellID(spellID)
+                if baseSpell and baseSpell ~= spellID then
+                    cache[spellName] = baseSpell
+                end
+            end
+        end
+    end
+end
 
 --- GSE.TranslateSequence will translate from local spell name to spell id and back again.\
 -- Mode of "STRING" will return local names where mode "ID" will return id's
@@ -31,6 +140,7 @@ end
 
 function GSE.TranslateString(instring, mode, cleanNewLines, dropAbsolute)
     instring = GSE.UnEscapeString(instring)
+    if type(instring) ~= "string" then return instring and tostring(instring) or "" end
     local lines = GSE.SplitMeIntoLines(instring)
     if #lines > 1 then
         local output = {}
@@ -110,11 +220,11 @@ function GSE.TranslateString(instring, mode, cleanNewLines, dropAbsolute)
                         if not GSE.isEmpty(trimRight) then
                             etc = string.sub(etc, 1, trimRight - 1)
                         end
-                        if mode == Statics.TranslatorMode.String then
-                            if tonumber(GetCVar("ActionButtonUseKeyDown")) == 1 then
-                                etc = etc .. " LeftButton t"
-                            end
-                        end
+                        -- Always emit a bare `/click NAME` (down=false). GSE
+                        -- sequence buttons now pin useOnKeyDown=false, so a
+                        -- key-DOWN forward (`LeftButton t`) would no longer match
+                        -- the executor's cast edge. Bare /click resolves on the
+                        -- up edge under both ActionButtonUseKeyDown states.
                         output = output .. " " .. etc
                     elseif Statics.CastCmds[string.lower(cmd)] then
                         -- Check for cast Sequences
@@ -226,9 +336,8 @@ function GSE.TranslateSpell(str, mode, cleanNewLines, absolute)
             if GSEOptions.showCurrentSpells then
                 local test = tonumber(etc)
                 if test then
-                    local FindSpellOverrideByID = FindSpellOverrideByID or C_SpellBook.FindSpellOverrideByID
-                    local currentSpell = FindSpellOverrideByID(test)
-                    if currentSpell then
+                    local currentSpell = GSE.GetCurrentSpellID(test)
+                    if currentSpell and currentSpell ~= test then
                         ---@diagnostic disable-next-line: cast-local-type
                         etc = currentSpell
                     end
@@ -277,6 +386,7 @@ function GSE.GetConditionalsFromString(str)
         mods = string.sub(str, leftstr, rightstr)
         GSE.PrintDebugMessage("mods changed to: " .. mods, GNOME)
         str = string.sub(str, rightstr + 1)
+        str = string.gsub(str, "^%s+", "")
         GSE.PrintDebugMessage("str changed to: " .. str, GNOME)
     end
     -- if not cleanNewLines then
@@ -289,21 +399,16 @@ function GSE.GetConditionalsFromString(str)
         GSE.PrintDebugMessage("found reset= at" .. resetleft, GNOME)
     end
 
-    local rightfound = false
-    local resetright = 0
     if resetleft then
-        for i = 1, #str do
-            local c = str:sub(i, i)
-            if c == " " then
-                if not rightfound then
-                    resetright = i
-                    rightfound = true
-                end
-            end
+        local resetright = string.find(str, "%s", resetleft) or (string.len(str) + 1)
+        local resetmod = string.sub(str, resetleft, resetright - 1)
+        if not GSE.isEmpty(mods) then
+            mods = mods .. " "
         end
-        mods = mods .. " " .. string.sub(str, resetleft, resetright)
+        mods = mods .. resetmod
         GSE.PrintDebugMessage("reset= mods changed to: " .. mods, GNOME)
-        str = string.sub(str, resetright + 1)
+        str = string.sub(str, resetright)
+        str = string.gsub(str, "^%s+", "")
         GSE.PrintDebugMessage("reset= test str changed to: " .. str, GNOME)
         found = true
     end
@@ -317,6 +422,15 @@ function GSE.GetSpellId(spellstring, mode, absolute)
     if GSE.isEmpty(mode) then
         mode = Statics.TranslatorMode.ID
     end
+    -- C_Spell.GetSpellInfo errors on nil / non-string-non-number input.
+    -- CreateSpellEditBox calls us with action.spell, which is nil for a
+    -- freshly-added Spell action the user hasn't filled in yet.
+    if GSE.isEmpty(spellstring) then
+        return nil
+    end
+    if type(spellstring) ~= "string" and type(spellstring) ~= "number" then
+        return nil
+    end
     if GSE.isEmpty(GSESpellCache) then
         GSESpellCache = {
             ["enUS"] = {}
@@ -326,21 +440,26 @@ function GSE.GetSpellId(spellstring, mode, absolute)
     if GSE.isEmpty(GSESpellCache[GetLocale()]) then
         GSESpellCache[GetLocale()] = {}
     end
-    local returnval, name, rank, spellId
+    local returnval, name, rank, spellId, rawSpellId
 
-    local spellinfo = C_Spell.GetSpellInfo(spellstring)
+    local spellinfo = GSE.GetSpellInfo(spellstring)
     if not spellinfo then
         if type(spellstring) == "string" then
             ---@diagnostic disable-next-line: missing-fields
             spellinfo = {}
             spellinfo.name = spellstring
-            if GSESpellCache[GetLocale()][spellinfo] then
-                spellinfo.spellID = GSESpellCache[GetLocale()][spellinfo]
+            if GSESpellCache[GetLocale()][spellstring] then
+                spellinfo.spellID = GSESpellCache[GetLocale()][spellstring]
             end
+        else
+            -- Numeric spell ID that the client doesn't know about: nothing
+            -- meaningful to return. Bail rather than indexing nil below.
+            return nil
         end
     end
     rank = spellinfo.rank and spellinfo.rank or nil
-    spellId = spellinfo.spellID and spellinfo.spellID or nil
+    rawSpellId = normaliseSpellIDValue(spellinfo.spellID)
+    spellId = rawSpellId
     name = spellinfo.name
     if mode ~= Statics.TranslatorMode.ID then
         if not GSE.isEmpty(rank) then
@@ -352,26 +471,18 @@ function GSE.GetSpellId(spellstring, mode, absolute)
         returnval = spellId
         -- Check for overrides like Crusade and Avenging Wrath.
         if not absolute and not GSE.isEmpty(returnval) then
-            local FindBaseSpellByID =  C_SpellBook.FindBaseSpellByID or  FindBaseSpellByID
-            if FindBaseSpellByID(returnval) then
-                returnval = FindBaseSpellByID(returnval)
-            -- if type(returnval) == "table" then
-            --     returnval = returnval.spellID
-            -- end
-            end
-            -- Still need Heart of Azeroth overrides.
-            if not GSE.isEmpty(Statics.BaseSpellTable[returnval]) then
-                returnval = Statics.BaseSpellTable[returnval]
-            end
+            returnval = findBaseSpellID(returnval)
         end
     end
     if not GSE.isEmpty(returnval) then
         if mode == Statics.TranslatorMode.ID and tonumber(spellstring) == nil then
-            if
-                GSE.isEmpty(GSESpellCache[GetLocale()][spellstring]) == true or
-                    GSESpellCache[GetLocale()][spellstring] ~= returnval
-             then
-                GSESpellCache[GetLocale()][spellstring] = returnval
+            local existingCache = GSESpellCache[GetLocale()][spellstring]
+            if canCacheSpellLookup(spellstring, returnval, rawSpellId) then
+                if GSE.isEmpty(existingCache) == true or existingCache ~= returnval then
+                    GSESpellCache[GetLocale()][spellstring] = returnval
+                end
+            elseif not GSE.isEmpty(existingCache) then
+                returnval = existingCache
             end
         end
         GSE.PrintDebugMessage(
@@ -427,4 +538,5 @@ end
 
 GSE.TranslatorAvailable = true
 
-GSE.DebugProfile("Translator")
+if type(GSE.DebugProfile) == "function" then GSE.DebugProfile("Translator") end
+
